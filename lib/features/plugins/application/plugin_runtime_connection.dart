@@ -591,6 +591,24 @@ final class PluginRuntimeSourceImportController extends Notifier<PluginSourceImp
       state = const PluginSourceImportState.idle();
     }
   }
+
+  /// Keeps the existing import lock active across bundle selection, planning,
+  /// confirmation and the single Runtime batch handoff.
+  Future<List<PluginTransferImportResult>?> importSourceCollection(Future<List<PluginTransferImportResult>?> Function() operation) async {
+    if (state.isImporting) return null;
+    state = const PluginSourceImportState(isImporting: true, message: '正在准备数据源合集', logs: <String>['正在准备数据源合集']);
+    try {
+      final results = await operation();
+      if (results != null && results.isNotEmpty) {
+        state = const PluginSourceImportState(isImporting: true, message: '正在刷新数据源列表', logs: <String>['合集处理完成', '正在刷新数据源列表']);
+        ref.read(pluginRuntimeCatalogChangeProvider.notifier).publish();
+        await ref.read(pluginRuntimeConnectionProvider.future);
+      }
+      return results;
+    } finally {
+      state = const PluginSourceImportState.idle();
+    }
+  }
 }
 
 String _initializationMessage(RuntimeInitializationStage stage) {

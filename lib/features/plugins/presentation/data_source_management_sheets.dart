@@ -12,12 +12,16 @@ import 'package:mg_read/app/app_theme.dart';
 
 enum DataSourceManagementAction { verify, diagnostics, help, uninstall }
 
+enum DataSourceImportChoice { node, native, collection }
+
 bool get supportsNativeSourceImport =>
     !const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME') &&
     !const bool.fromEnvironment('MGREAD_NODE_ONLY') &&
     (Platform.isWindows || Platform.isAndroid);
 
-Future<bool?> showDataSourceImportSheet(BuildContext context) => showModalBottomSheet<bool>(
+bool get supportsSourceCollectionImport => !const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME');
+
+Future<DataSourceImportChoice?> showDataSourceImportSheet(BuildContext context) => showModalBottomSheet<DataSourceImportChoice>(
   context: context,
   isScrollControlled: true,
   showDragHandle: true,
@@ -30,15 +34,23 @@ Future<bool?> showDataSourceImportSheet(BuildContext context) => showModalBottom
         icon: Icons.insert_drive_file_outlined,
         title: const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME') ? '原生数据源' : 'Node 数据源',
         subtitle: const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME') ? '选择 .mgplugin 安装包' : '选择 .mgplugin.js 或 .mgplugin 文件',
-        onTap: () => Navigator.pop(context, false),
+        onTap: () => Navigator.pop(context, DataSourceImportChoice.node),
       ),
+      if (supportsSourceCollectionImport)
+        _ActionTile(
+          actionKey: const Key('data-source-add-collection'),
+          icon: Icons.library_add_outlined,
+          title: '导入数据源合集',
+          subtitle: '选择 .mgplugins 文件，勾选要新增或覆盖的 Node 数据源',
+          onTap: () => Navigator.pop(context, DataSourceImportChoice.collection),
+        ),
       if (supportsNativeSourceImport)
         _ActionTile(
           actionKey: const Key('data-source-add-native'),
           icon: Icons.developer_board_outlined,
           title: '原生数据源',
           subtitle: '选择适用于当前平台的 .mgplugin 安装包',
-          onTap: () => Navigator.pop(context, true),
+          onTap: () => Navigator.pop(context, DataSourceImportChoice.native),
         ),
     ],
   ),

@@ -122,6 +122,11 @@ Flutter 主应用
 数据源发布为单个 `.mgplugin.js`，或包含单个 JS、元数据与图标的 `.mgplugin` 压缩包。开发时使用的第三方
 npm 包必须在构建时打入 JS，发布后只使用 Node.js 内置模块，不需要下载或安装 npm 依赖。
 
+`main` 分支的数据源或共享 Source 包变化后，
+[数据源合集工作流](https://github.com/lingy-Mg/mg_read/actions/workflows/source-collection.yml)会生成可直接下载的
+`mgread-sources.mgplugins` 合集。它包含仓库中可发布的 Node 数据源，不包含原生数据源。在 App 的
+“添加数据源”中选择“导入数据源合集”，即可勾选要新增或覆盖更新的来源；现有来源会显示版本供确认。
+
 仓库中的真实数据源位于：
 
 ```text

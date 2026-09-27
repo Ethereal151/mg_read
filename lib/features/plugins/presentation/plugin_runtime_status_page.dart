@@ -12,9 +12,11 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/plugins/application/plugin_runtime_connection.dart';
+import 'package:mg_read/features/plugins/application/source_collection_import.dart';
 import 'package:mg_read/shared/presentation/app_navigation_destination.dart';
 import 'package:mg_read/shared/presentation/widgets/app_loading_state.dart';
 import 'package:mg_read/shared/presentation/widgets/app_secondary_page_chrome.dart';
@@ -24,6 +26,7 @@ import 'data_source_management_sheets.dart';
 import 'plugin_runtime_help_page.dart';
 import 'plugin_import_error_dialog.dart';
 import 'plugin_runtime_source_projection.dart';
+import 'source_collection_import_sheet.dart';
 
 /// Runtime-backed data-source management presentation.
 class PluginRuntimeStatusPage extends ConsumerWidget {
@@ -210,20 +213,57 @@ class _DataSourceContentState extends ConsumerState<_DataSourceContent> {
   }
 
   Future<void> _importDataSource() async {
-    final native = await showDataSourceImportSheet(context);
+    final choice = await showDataSourceImportSheet(context);
     if (!mounted ||
-        native == null ||
+        choice == null ||
         ref.read(pluginRuntimeSourceImportProvider).isImporting ||
         ref.read(pluginRuntimeSourceActionProvider).isNotEmpty) {
       return;
     }
     try {
-      final imported = await ref.read(pluginRuntimeSourceImportProvider.notifier).importLocalPlugin(native: native);
-      if (!mounted || !imported) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('数据源已添加。')));
+      if (choice == DataSourceImportChoice.collection) {
+        if (!supportsSourceCollectionImport) return;
+        List<SourceCollectionCandidate>? candidates;
+        final results = await ref.read(pluginRuntimeSourceImportProvider.notifier).importSourceCollection(() async {
+          final collection = await ref.read(sourceCollectionImportServiceProvider).pickCollection();
+          if (collection == null || !mounted) return null;
+          final plan = await ref
+              .read(pluginRuntimeFacadeProvider)
+              .invoke(
+                PluginTransferPlanInvocation(artifacts: <PluginTransferArtifact>[for (final item in collection.plugins) item.artifact]),
+              );
+          final connection = await ref.read(pluginRuntimeConnectionProvider.future);
+          candidates = planSourceCollection(collection: collection, plan: plan, installed: connection.plugins);
+          if (!mounted) return null;
+          final selection = await showSourceCollectionImportSheet(context, candidates!);
+          if (selection == null || !mounted) return null;
+          return ref
+              .read(pluginRuntimeFacadeProvider)
+              .importPluginArtifacts(selection.artifacts, forceUpgradePluginIds: selection.forceUpgradePluginIds);
+        });
+        if (!mounted || results == null) return;
+        await showSourceCollectionImportResults(context, results, candidates ?? const <SourceCollectionCandidate>[]);
+      } else {
+        final imported = await ref
+            .read(pluginRuntimeSourceImportProvider.notifier)
+            .importLocalPlugin(native: choice == DataSourceImportChoice.native);
+        if (!mounted || !imported) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('数据源已添加。')));
+      }
     } on Object catch (error) {
       if (!mounted) return;
-      await showPluginImportErrorDialog(context, error);
+      if (choice == DataSourceImportChoice.collection) {
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('数据源合集无法导入'),
+            content: SelectableText(error is SourceCollectionImportException ? error.message : 'Runtime 未能完成合集批量安装，请稍后重试。'),
+            actions: <Widget>[TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('知道了'))],
+          ),
+        );
+      } else {
+        await showPluginImportErrorDialog(context, error);
+      }
     }
   }
 

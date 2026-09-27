@@ -91,7 +91,7 @@ void main() {
   });
 
   testWidgets('native import choice returns the native intent', (tester) async {
-    bool? result;
+    DataSourceImportChoice? result;
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
@@ -106,7 +106,27 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('data-source-add-native')));
     await tester.pumpAndSettle();
-    expect(result, isTrue);
+    expect(result, DataSourceImportChoice.native);
+  });
+
+  testWidgets('add-data-source chooser exposes Node collection import', (tester) async {
+    DataSourceImportChoice? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(onPressed: () async => result = await showDataSourceImportSheet(context), child: const Text('open')),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('data-source-add-collection')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('data-source-add-collection')));
+    await tester.pumpAndSettle();
+    expect(result, DataSourceImportChoice.collection);
   });
 
   testWidgets('320dp large text keeps header clear and all tools reachable', (tester) async {
