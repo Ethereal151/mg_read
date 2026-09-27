@@ -1,4 +1,6 @@
-/// Global audio host behavior tests with an I/O-free playback backend.
+/// Global audio host behavior and mini-player layout tests with no media I/O.
+/// Exercise the same controller across full, bar and square presentations;
+/// geometry assertions cover touch targets, status bounds and text scaling.
 library;
 
 import 'dart:async';
@@ -148,6 +150,7 @@ void main() {
 
     expect(settings.get(AppSettingKeys.audioExitBehavior), 'continue');
     expect(find.text('详情页'), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('source-audio-mini-playing-indicator'))), const Size.square(22));
     await settings.set(AppSettingKeys.audioMiniPlayerStyle, 'square');
     await tester.pump();
     expect(tester.getSize(find.byKey(const Key('source-audio-mini-player'))), const Size(100, 100));
@@ -156,6 +159,18 @@ void main() {
     final miniCover = find.descendant(of: find.byKey(const Key('source-audio-mini-cover')), matching: find.byType(Image));
     expect(miniCover, findsOneWidget);
     expect(tester.widget<Image>(miniCover).image, isA<MemoryImage>());
+
+    _expectMiniControlsSeparate(tester);
+    final toggle = find.byKey(const Key('source-audio-mini-toggle'));
+
+    await tester.tap(toggle);
+    await tester.pump();
+    expect(backend.snapshot.playing, isFalse);
+    expect(find.byKey(const Key('source-audio-player')), findsNothing);
+    await tester.tap(toggle);
+    await tester.pump();
+    expect(backend.snapshot.playing, isTrue);
+    expect(backend.openCalls, 1);
 
     final Rect miniBeforeDrag = tester.getRect(find.byKey(const Key('source-audio-mini-player')));
     final TestGesture dragGesture = await tester.startGesture(miniBeforeDrag.center);
@@ -199,6 +214,105 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     backButtonDispatcher.removeCallback(routerFallback);
   }, timeout: const Timeout(Duration(seconds: 15)));
+
+  for (final dark in <bool>[false, true]) {
+    testWidgets('mini layouts stay separate and usable with large text, dark=$dark', (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final settings = AppSettingsManager(store: FakeSettingsStore(), registry: AppSettingKeys.registry);
+      await settings.initialize();
+      addTearDown(settings.close);
+      final request = _request();
+      final backend = _FakeAudioBackend();
+      final dispatcher = RootBackButtonDispatcher();
+      Future<bool> routerFallback() async => false;
+      dispatcher.addCallback(routerFallback);
+      addTearDown(() => dispatcher.removeCallback(routerFallback));
+      late WidgetRef rootRef;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appSettingsProvider.overrideWithValue(settings),
+            sourceContentGatewayProvider.overrideWithValue(_AudioGateway(request)),
+            sourceAudioPlaybackBackendFactoryProvider.overrideWithValue(() => backend),
+          ],
+          child: MaterialApp(
+            theme: dark ? AppTheme.dark() : AppTheme.light(),
+            home: const Scaffold(body: Center(child: Text('书架'))),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.6), disableAnimations: true),
+              child: Consumer(
+                builder: (context, ref, _) {
+                  rootRef = ref;
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      child!,
+                      SourceAudioPlaybackNavigator(backButtonDispatcher: dispatcher),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      final service = rootRef.read(sourceAudioPlaybackServiceProvider.notifier);
+      final playback = service.open(request);
+      await _pumpUntil(tester, () => find.byKey(const Key('audio-back')).evaluate().isNotEmpty);
+      expect(tester.takeException(), isNull, reason: 'Expanded player must fit large text');
+      final controller = service.controller!;
+      final sessionId = rootRef.read(sourceAudioPlaybackServiceProvider).sessionId!;
+      service.minimize(sessionId);
+      await _pumpUntil(tester, () => find.byKey(const Key('source-audio-mini-player')).evaluate().isNotEmpty);
+
+      for (final style in <String>['bar', 'square']) {
+        await settings.set(AppSettingKeys.audioMiniPlayerStyle, style);
+        await tester.pump();
+        expect(tester.takeException(), isNull, reason: '$style mini player must fit large text');
+        _expectMiniControlsSeparate(tester);
+        final toggle = find.byKey(const Key('source-audio-mini-toggle'));
+        await tester.tap(toggle);
+        await tester.pump();
+        expect(controller.snapshot.playing, isFalse);
+        expect(find.byTooltip('音频已暂停'), findsOneWidget);
+        await tester.tap(toggle);
+        await tester.pump();
+        expect(controller.snapshot.playing, isTrue);
+        expect(tester.takeException(), isNull);
+      }
+
+      await tester.tap(find.byKey(const Key('source-audio-mini-status')));
+      await _pumpUntil(tester, () => find.byKey(const Key('audio-back')).evaluate().isNotEmpty);
+      expect(service.controller, same(controller));
+      expect(backend.openCalls, 1);
+      expect(backend.disposeCalls, 0);
+      expect(tester.takeException(), isNull);
+      await service.stop();
+      await playback;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 350));
+    });
+  }
+}
+
+void _expectMiniControlsSeparate(WidgetTester tester) {
+  final player = tester.getRect(find.byKey(const Key('source-audio-mini-player')));
+  final status = tester.getRect(find.byKey(const Key('source-audio-mini-status')));
+  final toggle = tester.getRect(find.byKey(const Key('source-audio-mini-toggle')));
+  final stop = tester.getRect(find.byKey(const Key('source-audio-mini-stop')));
+  final indicator = tester.getRect(find.byKey(const Key('source-audio-mini-playing-indicator')));
+  expect(indicator.size, const Size.square(22));
+  expect(indicator.center, status.center);
+  expect(status.overlaps(toggle), isFalse);
+  expect(status.overlaps(stop), isFalse);
+  expect(toggle.overlaps(stop), isFalse);
+  for (final control in <Rect>[status, toggle, stop]) {
+    expect(player.intersect(control), control);
+    expect(control.size.shortestSide, greaterThanOrEqualTo(44));
+  }
 }
 
 Future<void> _pumpUntil(WidgetTester tester, bool Function() condition, {String Function()? describeFailure}) async {

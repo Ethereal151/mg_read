@@ -1,7 +1,30 @@
+/// App-global mini-player visuals; playback and artwork I/O stay host-owned.
+/// The square reserves separate status/action lanes with 44px touch targets.
+/// The bar measures its two text lines to preserve system text scaling.
+/// Center the animation inside its badge so tight parent constraints cannot
+/// stretch its bars; its ticker follows playback and is disposed with the UI.
 part of 'source_audio_playback_host.dart';
 
 Widget _buildSourceAudioMiniArtwork(BuildContext context, AudioTrack track, SourceAudioPlaybackRequest request) {
   return KeyedSubtree(key: const Key('source-audio-mini-cover'), child: _sourceAudioArtwork(context, track, request));
+}
+
+double _sourceAudioMiniBarHeight(BuildContext context) {
+  final theme = Theme.of(context);
+  double lineHeight(TextStyle? style) {
+    final painter = TextPainter(
+      text: TextSpan(text: '音频', style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final height = painter.height;
+    painter.dispose();
+    return height;
+  }
+
+  final textHeight = lineHeight(theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)) + lineHeight(theme.textTheme.bodySmall);
+  return math.max(kMinInteractiveDimension, textHeight) + AppSpacing.compact * 2;
 }
 
 Widget _buildSourceAudioMiniBar(
@@ -57,13 +80,21 @@ Widget _buildSourceAudioMiniSquare(
   required AudioPlayerController controller,
   required VoidCallback onStop,
 }) {
-  return Stack(
-    fit: StackFit.expand,
-    children: <Widget>[
-      Center(child: _buildSourceAudioPlaybackIndicator(context, snapshot, failure, tokens, square: true)),
-      Positioned(right: 0, bottom: 0, child: _buildSourceAudioToggle(snapshot, foreground, controller, compact: true)),
-      Positioned(right: 0, top: 0, child: _buildSourceAudioStop(tokens, onStop, compact: true)),
-    ],
+  return Padding(
+    padding: const EdgeInsets.all(4),
+    child: Row(
+      children: <Widget>[
+        _buildSourceAudioPlaybackIndicator(context, snapshot, failure, tokens, square: true),
+        const SizedBox(width: 4),
+        Column(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            _buildSourceAudioStop(tokens, onStop, compact: true),
+            _buildSourceAudioToggle(snapshot, foreground, controller, compact: true),
+          ],
+        ),
+      ],
+    ),
   );
 }
 
@@ -75,27 +106,34 @@ Widget _buildSourceAudioPlaybackIndicator(
   bool square = false,
 }) {
   final message = failure == null
-      ? '音频正在后台播放'
+      ? (snapshot.buffering || snapshot.resourceLoading
+            ? '音频正在缓冲'
+            : snapshot.playing
+            ? '音频正在后台播放'
+            : '音频已暂停')
       : '${failure.message}\n发生位置：${failure.location}\n诊断编号：${failure.code}'
             '${failure.debugDetail == null ? '' : '\n技术原因：${failure.debugDetail}'}';
   return DecoratedBox(
+    key: const Key('source-audio-mini-status'),
     decoration: BoxDecoration(
       color: tokens.accentSoft.withValues(alpha: 0.60),
       borderRadius: square ? BorderRadius.circular(22) : AppRadii.discoveryTile,
       border: Border.all(color: tokens.accent.withValues(alpha: 0.18)),
     ),
     child: SizedBox.square(
-      dimension: square ? 50 : 44,
+      dimension: 44,
       child: Tooltip(
         message: message,
-        child: failure == null
-            ? _SourceAudioPlayingIndicator(
-                playing: snapshot.playing,
-                buffering: snapshot.buffering || snapshot.resourceLoading,
-                disableAnimations: MediaQuery.maybeDisableAnimationsOf(context) ?? false,
-                color: tokens.accent,
-              )
-            : Icon(Icons.error_outline_rounded, color: tokens.warning),
+        child: Center(
+          child: failure == null
+              ? _SourceAudioPlayingIndicator(
+                  playing: snapshot.playing,
+                  buffering: snapshot.buffering || snapshot.resourceLoading,
+                  disableAnimations: MediaQuery.maybeDisableAnimationsOf(context) ?? false,
+                  color: tokens.accent,
+                )
+              : Icon(Icons.error_outline_rounded, color: tokens.warning),
+        ),
       ),
     ),
   );
@@ -105,11 +143,12 @@ Widget _buildSourceAudioToggle(AudioPlayerSnapshot snapshot, Color foreground, A
   return IconButton(
     key: const Key('source-audio-mini-toggle'),
     tooltip: snapshot.playing ? '暂停' : '播放',
-    constraints: compact ? const BoxConstraints.tightFor(width: 32, height: 32) : null,
+    constraints: compact ? const BoxConstraints.tightFor(width: 44, height: 44) : null,
+    style: compact ? IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.standard) : null,
     padding: compact ? EdgeInsets.zero : null,
     onPressed: () => unawaited(controller.toggle()),
     color: foreground,
-    icon: Icon(snapshot.playing ? Icons.pause_rounded : Icons.play_arrow_rounded, size: compact ? 16 : null),
+    icon: Icon(snapshot.playing ? Icons.pause_rounded : Icons.play_arrow_rounded, size: compact ? 20 : null),
   );
 }
 
@@ -117,11 +156,12 @@ Widget _buildSourceAudioStop(AppThemeTokens tokens, VoidCallback onStop, {bool c
   return IconButton(
     key: const Key('source-audio-mini-stop'),
     tooltip: '停止并关闭',
-    constraints: compact ? const BoxConstraints.tightFor(width: 32, height: 32) : null,
+    constraints: compact ? const BoxConstraints.tightFor(width: 44, height: 44) : null,
+    style: compact ? IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.standard) : null,
     padding: compact ? EdgeInsets.zero : null,
     onPressed: onStop,
     color: tokens.mutedText,
-    icon: Icon(Icons.close_rounded, size: compact ? 16 : null),
+    icon: Icon(Icons.close_rounded, size: compact ? 20 : null),
   );
 }
 

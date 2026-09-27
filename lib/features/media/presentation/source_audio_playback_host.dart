@@ -9,6 +9,7 @@
 /// - Android recovery also uses the system media notification; Windows relies
 ///   on this app-global mini player after its window is restored.
 /// - No system overlay permission is requested on either platform.
+/// - Mini-player bounds include scaled bar text and fixed square touch targets.
 library;
 
 import 'dart:async';
@@ -416,7 +417,6 @@ final class _DraggableSourceAudioMiniPlayer extends StatefulWidget {
 
 final class _DraggableSourceAudioMiniPlayerState extends State<_DraggableSourceAudioMiniPlayer> {
   static const double _maxWidth = 520;
-  static const double _barHeight = 44 + AppSpacing.compact * 2;
   static const double _squareSize = 100;
 
   Offset? _position;
@@ -462,7 +462,7 @@ final class _DraggableSourceAudioMiniPlayerState extends State<_DraggableSourceA
       builder: (context, constraints) {
         final square = widget.style == 'square';
         final availableWidth = square ? _squareSize : (constraints.maxWidth - AppSpacing.regular * 2).clamp(0.0, _maxWidth).toDouble();
-        final availableHeight = square ? _squareSize : _barHeight;
+        final availableHeight = square ? _squareSize : _sourceAudioMiniBarHeight(context);
         final minX = AppSpacing.regular;
         final maxX = (constraints.maxWidth - padding.right - AppSpacing.regular - availableWidth).clamp(minX, double.infinity).toDouble();
         final minY = padding.top + AppSpacing.regular;
