@@ -464,7 +464,7 @@ function homePage(entry, target, values, offset, size, collectionId) {
   const next = offset + items.length;
   const continuation = next < values.length ? { target, cursor: target + ":offset:" + next } : null;
   if (collectionId !== null) return { kind: "append", collectionId, items, continuation };
-  return { kind: "document", document: { components: [section(id, entry[1], items, continuation, "shelf")] } };
+  return { kind: "document", document: { components: [section(id, entry[1], items, continuation, "coverGrid")] } };
 }
 function section(id, title, items, continuation, layout = "coverGrid", icon = "audio", subtitle = null) {
   return { type: "section", id: `${id}:section`, title, subtitle, icon, children: [{ type: "contentCollection", id, layout, items, continuation }] };

@@ -4,6 +4,7 @@
  * 职责：调用听中国 JSON API，保留全部已确认首页题材区块，首页快照按 offset 翻阅，分类独立分页。
  * 生命周期：activate 保存当前 Runtime 上下文；播放地址只在当前插件进程内按书籍/章节缓存。
  * IO：来源请求和快速音频探测都走 ctx.http；媒体地址只经 ctx.resource.proxy 输出，不缓存媒体主体。
+ * 发现：首页封面比例不一，内容区使用按原图高度排布的封面网格。
  * 缓存：章节投影进入 Runtime 注入的持久化插件缓存，一天内直接命中；过期章节先返回旧目录并后台刷新。
  * 缓存：签名地址按上游失效时间（无法解析时使用短 TTL）管理；未过期的地址每次播放前用 HEAD 快速探测。
  */
@@ -267,7 +268,7 @@ function homePage(entry: typeof homeSections[number], target: string, values: Js
   const next = offset + items.length;
   const continuation = next < values.length ? { target, cursor: target + ':offset:' + next } : null;
   if (collectionId !== null) return { kind: 'append' as const, collectionId, items, continuation };
-  return { kind: 'document' as const, document: { components: [section(id, entry[1], items, continuation, 'shelf')] } };
+  return { kind: 'document' as const, document: { components: [section(id, entry[1], items, continuation, 'coverGrid')] } };
 }
 function section(id: string, title: string, items: readonly unknown[], continuation: unknown, layout = 'coverGrid', icon = 'audio', subtitle: string | null = null) { return { type: 'section', id: `${id}:section`, title, subtitle, icon, children: [{ type: 'contentCollection', id, layout, items, continuation }] }; }
 function summary(value: Json, idOverride?: string) {
