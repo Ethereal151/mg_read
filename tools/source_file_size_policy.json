@@ -39,7 +39,8 @@
     ".g.dart",
     ".freezed.dart",
     ".gen.dart",
-    ".mocks.dart"
+    ".mocks.dart",
+    ".mgplugin.js"
   ],
   "legacyBaseline": {
     "packages/mg_read_node_runtime/src/desktop-runtime.ts": 1130,

@@ -156,13 +156,14 @@ class _GroupedDetailCatalogState extends State<_GroupedDetailCatalog> {
         groupId: id,
       );
       final group = result.groups.firstWhere((group) => group.id == id && !group.deferred);
-      if (mounted && generation == _generation)
+      if (mounted && generation == _generation) {
         setState(() {
           _loaded[id] = group;
           while (_loaded.length > 3) {
             _loaded.remove(_loaded.keys.first);
           }
         });
+      }
     } on Object {
       if (mounted && generation == _generation) setState(() => _failed.add(id));
     } finally {

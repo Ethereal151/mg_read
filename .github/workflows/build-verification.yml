@@ -35,12 +35,18 @@ jobs:
 
   android:
     name: Android release APK
-    needs: debounce
+    needs: [debounce, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Download Android native runtime
+        uses: actions/download-artifact@v8
+        with:
+          name: mgread-android-native-${{ github.sha }}
+          path: packages/mgread_plugin_runtime/android/src/native/jniLibs
 
       - name: Set up Java 17
         uses: actions/setup-java@v6
@@ -103,10 +109,30 @@ jobs:
     name: Windows x64 release
     needs: debounce
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+        with:
+          toolchain: 1.97.1
+          target: x86_64-pc-windows-msvc,x86_64-linux-android,aarch64-linux-android
+          rustflags: ""
+
+      - name: Build native Runtime hosts
+        shell: pwsh
+        run: ./tools/build_native_runtime.ps1 -Platform all -NdkRoot "$env:ANDROID_SDK_ROOT/ndk/28.2.13676358"
+
+      - name: Upload Android native Runtime
+        uses: actions/upload-artifact@v7
+        with:
+          name: mgread-android-native-${{ github.sha }}
+          path: packages/mgread_plugin_runtime/android/src/native/jniLibs/**
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
 
       - name: Fetch Windows Node Runtime from Git LFS
         shell: pwsh
