@@ -85,10 +85,11 @@ async function searchSuggestions(_request) {
 }
 async function discover(request) {
   if (request.target === null) {
+    const account = accountSection(await readHomeUserSnapshot());
     return frozen({
       kind: "document",
       document: {
-        components: [{
+        components: [account, {
           type: "section",
           id: "fanqie-channels",
           title: "番茄小说",
@@ -100,28 +101,11 @@ async function discover(request) {
             layout: "chips",
             categories: CHANNELS.map(([id, title]) => ({ id, title, target: `channel:${id}`, count: null, url: null, icon: "book" }))
           }]
-        }, {
-          type: "section",
-          id: "fanqie-account",
-          title: "账号功能",
-          subtitle: "登录后查看番茄官方书架",
-          icon: "books",
-          children: [{
-            type: "categoryCollection",
-            id: "fanqie-account-actions",
-            layout: "chips",
-            categories: [
-              { id: "login", title: "登录番茄小说", target: "login", count: null, url: null, icon: "books" },
-              { id: "login-status", title: "检查登录状态", target: "login-status", count: null, url: null, icon: "books" },
-              { id: "bookshelf", title: "读取书架", target: "bookshelf", count: null, url: null, icon: "books" }
-            ]
-          }]
         }]
       }
     });
   }
   if (request.target === "login") return openLogin();
-  if (request.target === "login-status") return checkLoginStatus();
   if (request.target === "bookshelf") return openBookshelf(request);
   const channel = CHANNELS.find(([id]) => request.target === `channel:${id}`);
   if (!channel) throw new Error("Discovery target is invalid.");
@@ -155,11 +139,7 @@ async function openLogin() {
     await page.show({ timeoutMs: 15e3 });
   });
   requireContext().log.info("login_page_opened");
-  return statusDocument("番茄网页登录已打开", "请在打开的官方 WebView 中完成登录，然后使用“检查登录状态”或“读取书架”。");
-}
-async function checkLoginStatus() {
-  const snapshot = await readUserSnapshot();
-  return accountDocument(snapshot);
+  return statusDocument("番茄网页登录已打开", "请在官方 WebView 中完成登录，再返回发现主页刷新账号资料和书架入口。");
 }
 async function openBookshelf(request) {
   const snapshot = await readBookshelfSnapshot();
@@ -197,7 +177,7 @@ async function openBookshelf(request) {
   });
 }
 async function readUserSnapshot() {
-  const response = await requestBrowserJson(USER_INFO_URL);
+  const response = await requestBrowserJson(USER_INFO_URL, 8e3);
   const status = loginState(response.code);
   if (status !== "loggedIn" || response.data === null) return { status, profile: null };
   const data = response.data;
@@ -210,6 +190,14 @@ async function readUserSnapshot() {
       avatar: text(data.avatar)
     }
   };
+}
+async function readHomeUserSnapshot() {
+  try {
+    return await readUserSnapshot();
+  } catch {
+    requireContext().log.warn("account_status_unavailable");
+    return { status: "unknown", profile: null };
+  }
 }
 async function readBookshelfSnapshot() {
   const response = await requestBrowserJson(BOOKSHELF_URL);
@@ -228,7 +216,7 @@ function loginState(code) {
   if (code === -1 || code === 101119) return "loggedOut";
   return "unknown";
 }
-async function requestBrowserJson(url) {
+async function requestBrowserJson(url, timeoutMs = 3e4) {
   const raw = await requireContext().browser.sessionV1.request({
     version: 1,
     sessionKey: BROWSER_SESSION_KEY,
@@ -239,7 +227,7 @@ async function requestBrowserJson(url) {
     interaction: "silent",
     presentation: "hidden",
     transport: "http",
-    timeoutMs: 3e4,
+    timeoutMs,
     maxResponseBytes: 2 * 1024 * 1024
   });
   if (!isObject(raw) || typeof raw.status !== "number" || raw.status < 200 || raw.status >= 400 || typeof raw.body !== "string") {
@@ -260,7 +248,7 @@ function statusDocument(title, subtitle) {
     document: { components: [{ type: "section", id: `fanqie-status:${title}`, title, subtitle, icon: "books", children: [] }] }
   });
 }
-function accountDocument(snapshot) {
+function accountSection(snapshot) {
   const loggedIn = snapshot.status === "loggedIn";
   const title = loggedIn ? "番茄已登录" : snapshot.status === "loggedOut" ? "番茄未登录" : "登录状态待确认";
   const profile = snapshot.profile;
@@ -269,45 +257,28 @@ function accountDocument(snapshot) {
     { id: "bookshelf", title: "查看番茄书架", target: "bookshelf", count: null, url: null, icon: "books" },
     { id: "login", title: "打开番茄小说", target: "login", count: null, url: null, icon: "globe" }
   ] : [
-    { id: "login", title: "登录番茄小说", target: "login", count: null, url: null, icon: "globe" },
-    { id: "login-status", title: "重新检查状态", target: "login-status", count: null, url: null, icon: "books" }
+    { id: "login", title: "登录番茄小说", target: "login", count: null, url: null, icon: "globe" }
   ];
   return frozen({
-    kind: "document",
-    document: { components: [{
-      type: "section",
-      id: "fanqie-account-status",
-      title,
-      subtitle: null,
-      icon: "books",
-      children: [{
-        type: "profileCard",
-        id: "fanqie-account-profile",
-        name: loggedIn ? profile?.name || "番茄用户" : title,
-        subtitle: loggedIn ? profile?.description || "已连接番茄小说账号" : snapshot.status === "loggedOut" ? "登录后可查看个人资料和官方书架" : "当前无法从番茄小说确认账号状态",
-        badge: loggedIn ? "已登录" : snapshot.status === "loggedOut" ? "未登录" : "待确认",
-        avatarUrl: avatar,
-        details: loggedIn && profile?.id ? [{ label: "用户 ID", value: profile.id }] : []
-      }, {
-        type: "section",
-        id: "fanqie-account-actions-section",
-        title: "账号功能",
-        subtitle: loggedIn ? "使用当前账号访问番茄小说内容" : "在官方网页完成登录后返回此页检查",
-        icon: "books",
-        children: [{ type: "categoryCollection", id: "fanqie-account-actions-list", layout: "list", categories: actions }]
-      }, {
-        type: "section",
-        id: "fanqie-account-about-section",
-        title: "状态说明",
-        subtitle: null,
-        icon: "book",
-        children: [{
-          type: "text",
-          id: "fanqie-account-about",
-          text: loggedIn ? "个人资料来自番茄小说用户接口；书架内容可从上方入口读取。" : snapshot.status === "loggedOut" ? "请在番茄小说官方网页完成登录，再返回刷新登录状态。" : "番茄小说用户接口未返回明确的登录状态，请稍后重试。"
-        }]
-      }]
-    }] }
+    type: "section",
+    id: "fanqie-account",
+    title: "我的番茄账号",
+    subtitle: null,
+    icon: "books",
+    children: [{
+      type: "profileCard",
+      id: "fanqie-account-profile",
+      name: loggedIn ? profile?.name || "番茄用户" : title,
+      subtitle: loggedIn ? profile?.description || "已连接番茄小说账号" : snapshot.status === "loggedOut" ? "登录后可查看个人资料和官方书架" : "当前无法确认账号状态，请刷新重试",
+      badge: loggedIn ? "已登录" : snapshot.status === "loggedOut" ? "未登录" : "待确认",
+      avatarUrl: avatar,
+      details: loggedIn && profile?.id ? [{ label: "用户 ID", value: profile.id }] : []
+    }, {
+      type: "categoryCollection",
+      id: "fanqie-account-actions",
+      layout: "chips",
+      categories: actions
+    }]
   });
 }
 function bookshelfOffset(cursor) {
