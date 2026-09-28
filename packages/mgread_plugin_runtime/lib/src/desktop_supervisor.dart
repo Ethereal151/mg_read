@@ -284,6 +284,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
     final kind = switch (result['kind']) {
       'development' => PluginCodeDirectoryKind.development,
       'installed' => PluginCodeDirectoryKind.installed,
+      'archive' => PluginCodeDirectoryKind.archive,
       _ => null,
     };
     if (directory is! String || directory.isEmpty || kind == null) {

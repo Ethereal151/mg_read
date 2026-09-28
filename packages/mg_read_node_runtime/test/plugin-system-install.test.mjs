@@ -63,6 +63,37 @@ test("standard project uses package.json metadata", async () => {
   assert.deepEqual(Object.keys(project), ["descriptor", "packageJson"]);
 });
 
+test("missing installed code opens the retained artifact directory", async (t) => {
+  const dataRoot = await temporaryDirectory(t, "mgread-plugin-missing-code-");
+  const artifact = join(dataRoot, "source.mgplugin");
+  await createPluginArchive(fixtureRoot, artifact);
+  const installer = new PluginInstaller(dataRoot);
+  await installer.installArtifact(artifact);
+  const manager = new PluginManager(dataRoot);
+  await manager.initialize();
+
+  const pluginId = "org.mgread.runtime.fixture";
+  const versionRoot = join(dataRoot, "plugins", pluginId, "versions", "1.0.0");
+  const archiveRoot = join(dataRoot, "plugin-archives", pluginId);
+  await stat(join(archiveRoot, "1.0.0.mgplugin"));
+  await rm(versionRoot, { force: true, recursive: true });
+  const coldManager = new PluginManager(dataRoot);
+
+  assert.deepEqual(await coldManager.resolveCodeDirectory(pluginId), {
+    directory: archiveRoot,
+    kind: "archive",
+  });
+
+  await rm(join(archiveRoot, "1.0.0.mgplugin"));
+  await writeFile(join(archiveRoot, "1.0.0.mgplugin.js"), "retained single-file artifact");
+  assert.deepEqual(await coldManager.resolveCodeDirectory(pluginId), {
+    directory: archiveRoot,
+    kind: "archive",
+  });
+  await rm(join(archiveRoot, "1.0.0.mgplugin.js"));
+  await assert.rejects(coldManager.resolveCodeDirectory(pluginId), { code: "plugin_load_failed" });
+});
+
 test("legacy manifest-only projects are rejected without a compatibility path", async (t) => {
   const root = await temporaryDirectory(t, "mgread-legacy-plugin-");
   await writeFile(

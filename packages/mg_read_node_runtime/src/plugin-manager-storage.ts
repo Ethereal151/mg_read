@@ -76,8 +76,17 @@ export class PluginManagerStorage {
       "versions",
       version,
     );
-    if (!await exists(directory)) throw new PluginManagerError("plugin_load_failed");
-    return Object.freeze({ directory, kind: "installed" } satisfies PluginCodeDirectory);
+    if (await exists(directory)) {
+      return Object.freeze({ directory, kind: "installed" } satisfies PluginCodeDirectory);
+    }
+    const archive = await retainedArtifactPath(this.#dataRoot, pluginId, version);
+    if (await exists(archive)) {
+      return Object.freeze({
+        directory: resolve(this.#dataRoot, "plugin-archives", pluginId),
+        kind: "archive",
+      } satisfies PluginCodeDirectory);
+    }
+    throw new PluginManagerError("plugin_load_failed");
   }
 
   async listCacheUsage(pluginId?: string): Promise<readonly PluginCacheUsage[]> {

@@ -98,6 +98,20 @@ void main() {
     }
   });
 
+  testWidgets('explains when only the original installation artifact remains', (WidgetTester tester) async {
+    if (!Platform.isWindows && !Platform.isMacOS) return;
+    final gateway = _DirectoryGateway(_installedConnection, directoryKind: PluginCodeDirectoryKind.archive, archiveFiles: 1);
+    await tester.pumpWidget(_host(gateway, 'org.example.installed'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const Key('data-source-detail-open-directory')), 200, scrollable: find.byType(Scrollable));
+    expect(find.text('打开原始安装包文件夹'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('data-source-detail-open-directory')));
+    await tester.pumpAndSettle();
+
+    expect(gateway.openedPluginIds, <String>['org.example.installed']);
+    expect(find.textContaining('已打开原始安装包文件夹'), findsOneWidget);
+  });
+
   testWidgets('uses the Runtime icon URL on the secondary detail page', (WidgetTester tester) async {
     final gateway = _DirectoryGateway(_iconConnection);
     await tester.pumpWidget(_host(gateway, 'org.example.with-icon'));
@@ -302,9 +316,11 @@ const _mediaConnection = PluginRuntimeConnection(
 );
 
 final class _DirectoryGateway implements PluginRuntimeGateway {
-  _DirectoryGateway(this.connection);
+  _DirectoryGateway(this.connection, {this.directoryKind, this.archiveFiles = 0});
 
   final PluginRuntimeConnection connection;
+  final PluginCodeDirectoryKind? directoryKind;
+  final int archiveFiles;
   final List<String> openedPluginIds = <String>[];
   final List<String> packagedPluginIds = <String>[];
   final List<String> uninstalledPluginIds = <String>[];
@@ -314,7 +330,13 @@ final class _DirectoryGateway implements PluginRuntimeGateway {
 
   @override
   Future<PluginInstallationSize> inspectInstallationSize({required String pluginId, required PluginInstallationSizeScope scope}) async =>
-      PluginInstallationSize(bytes: 0, fileCount: 0, pluginId: pluginId, scope: scope, version: 'test');
+      PluginInstallationSize(
+        bytes: 0,
+        fileCount: scope == PluginInstallationSizeScope.archive ? archiveFiles : 0,
+        pluginId: pluginId,
+        scope: scope,
+        version: 'test',
+      );
 
   @override
   Future<PluginRuntimeConnection> inspect() async => connection;
@@ -331,7 +353,8 @@ final class _DirectoryGateway implements PluginRuntimeGateway {
   @override
   Future<PluginCodeDirectoryKind> openCodeDirectory({required String pluginId}) async {
     openedPluginIds.add(pluginId);
-    return connection.plugins.single.status == 'development' ? PluginCodeDirectoryKind.development : PluginCodeDirectoryKind.installed;
+    return directoryKind ??
+        (connection.plugins.single.status == 'development' ? PluginCodeDirectoryKind.development : PluginCodeDirectoryKind.installed);
   }
 
   @override

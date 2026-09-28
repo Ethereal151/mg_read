@@ -172,7 +172,7 @@ export interface PluginInstallationUsage extends JsonObject {
 /** Runtime-internal code directory selected without exposing it to Flutter. */
 export interface PluginCodeDirectory {
   readonly directory: string;
-  readonly kind: "development" | "installed";
+  readonly kind: "development" | "installed" | "archive";
 }
 
 /** A stable terminal result for one Runtime-owned cache clear attempt. */

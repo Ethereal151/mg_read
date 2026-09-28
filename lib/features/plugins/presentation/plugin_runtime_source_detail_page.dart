@@ -80,6 +80,11 @@ class _DetailContent extends ConsumerWidget {
     final isDesktop = isWindows || Platform.isMacOS;
     final dataUsage = isDevelopment ? null : ref.watch(pluginRuntimeSourceDataSizeProvider(source.id));
     final archiveUsage = isDevelopment ? null : ref.watch(pluginRuntimeSourceArchiveSizeProvider(source.id));
+    final opensArchive =
+        dataUsage is AsyncData<PluginInstallationSize> &&
+        archiveUsage is AsyncData<PluginInstallationSize> &&
+        dataUsage.value.fileCount == 0 &&
+        archiveUsage.value.fileCount > 0;
     final opening = ref.watch(pluginRuntimeSourceDirectoryProvider).contains(source.id);
     final packaging = ref.watch(pluginRuntimeDevelopmentPackageProvider).contains(source.id);
     final removing = ref.watch(pluginRuntimeSourceActionProvider).contains(source.id);
@@ -178,6 +183,7 @@ class _DetailContent extends ConsumerWidget {
         if (isDesktop)
           _OpenDirectoryButton(
             isDevelopment: isDevelopment,
+            opensArchive: opensArchive,
             isOpening: opening,
             onPressed: opening ? null : () => _openDirectory(context, ref, source, isDevelopment),
           )
@@ -213,6 +219,7 @@ class _DetailContent extends ConsumerWidget {
       final message = switch (kind) {
         PluginCodeDirectoryKind.development => '已打开开发项目文件夹。代码变更会在下一次数据源调用时生效。',
         PluginCodeDirectoryKind.installed => '已打开已安装版本文件夹。该副本不会作为开发数据源插件即时生效。',
+        PluginCodeDirectoryKind.archive => '已打开原始安装包文件夹。已安装源码目录不存在，需重新安装才能恢复使用。',
       };
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } on Object {
@@ -414,9 +421,10 @@ String _formatInstallationBytes(int bytes) {
 }
 
 class _OpenDirectoryButton extends StatelessWidget {
-  const _OpenDirectoryButton({required this.isDevelopment, required this.isOpening, required this.onPressed});
+  const _OpenDirectoryButton({required this.isDevelopment, required this.opensArchive, required this.isOpening, required this.onPressed});
 
   final bool isDevelopment;
+  final bool opensArchive;
   final bool isOpening;
   final VoidCallback? onPressed;
 
@@ -436,6 +444,8 @@ class _OpenDirectoryButton extends StatelessWidget {
               ? '正在打开…'
               : isDevelopment
               ? '打开开发项目文件夹'
+              : opensArchive
+              ? '打开原始安装包文件夹'
               : '打开已安装源码文件夹',
           compact,
         ),

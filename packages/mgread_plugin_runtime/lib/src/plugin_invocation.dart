@@ -535,8 +535,9 @@ final class UninstallAllPluginsInvocation extends PluginInvocation<void> {
 
 /// Opens a source code directory through the Flutter desktop Supervisor.
 ///
-/// The result intentionally reveals only whether this was a live development
-/// project or an immutable installed version. It never contains a file path.
+/// The result identifies a live development project, an immutable installed
+/// version, or the retained artifact when its installed version is missing.
+/// It never contains a file path.
 @immutable
 final class OpenPluginCodeDirectoryInvocation
     extends PluginInvocation<PluginCodeDirectoryKind> {
@@ -558,6 +559,7 @@ final class OpenPluginCodeDirectoryInvocation
     return switch (result['kind']) {
       'development' => PluginCodeDirectoryKind.development,
       'installed' => PluginCodeDirectoryKind.installed,
+      'archive' => PluginCodeDirectoryKind.archive,
       _ => throw const PluginRuntimeException(
         'invalid_response',
         'The Runtime returned an invalid plugin code directory result.',
@@ -566,7 +568,7 @@ final class OpenPluginCodeDirectoryInvocation
   }
 }
 
-enum PluginCodeDirectoryKind { development, installed }
+enum PluginCodeDirectoryKind { development, installed, archive }
 
 /// Opens the Runtime-private data root through the Flutter Windows shell action.
 ///

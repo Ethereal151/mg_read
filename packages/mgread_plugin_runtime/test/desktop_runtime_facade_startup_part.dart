@@ -207,6 +207,58 @@ void _registerDesktopRuntimeStartupTests() {
   );
 
   test(
+    'Flutter desktop Supervisor opens the retained artifact when installed code is missing',
+    () async {
+      final runtimeDataRoot = await _stageInstalledStandardPlugin();
+      final openedDirectories = <String>[];
+      final runtime = PluginRuntime.desktopForTesting(
+        runtimeRepositoryRoot: nodeRuntimeRepositoryRoot,
+        runtimeDataRoot: runtimeDataRoot,
+        directoryLauncher: (Directory directory) async {
+          openedDirectories.add(directory.path);
+        },
+      );
+      addTearDown(() async {
+        await runtime.debugDispose();
+        await runtimeDataRoot.delete(recursive: true);
+      });
+
+      await runtime.invoke(const InstalledPluginsInvocation());
+      final archiveRoot = Directory(
+        <String>[
+          runtimeDataRoot.path,
+          'plugin-archives',
+          'org.mgread.flutter.fixture',
+        ].join(Platform.pathSeparator),
+      );
+      await archiveRoot.create(recursive: true);
+      await File(
+        <String>[
+          archiveRoot.path,
+          '1.0.0.mgplugin',
+        ].join(Platform.pathSeparator),
+      ).writeAsString('retained artifact');
+      await Directory(
+        <String>[
+          runtimeDataRoot.path,
+          'plugins',
+          'org.mgread.flutter.fixture',
+          'versions',
+          '1.0.0',
+        ].join(Platform.pathSeparator),
+      ).delete(recursive: true);
+
+      final kind = await runtime.invoke(
+        const OpenPluginCodeDirectoryInvocation(
+          pluginId: 'org.mgread.flutter.fixture',
+        ),
+      );
+      expect(kind, PluginCodeDirectoryKind.archive);
+      expect(openedDirectories, <String>[archiveRoot.path]);
+    },
+  );
+
+  test(
     'Flutter Facade lists and searches an installed standard Node plugin',
     () async {
       final repositoryRoot = nodeRuntimeRepositoryRoot;
