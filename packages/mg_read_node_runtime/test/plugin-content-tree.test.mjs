@@ -38,6 +38,20 @@ test('recursive discovery document accepts bounded semantic components', () => {
   assert.equal(result.document.components[1].children[0].children[0].items[0].content.coverOrientation, 'portrait');
 });
 
+test('profile card accepts bounded account details and rejects unsafe avatar URLs', () => {
+  const profile = {
+    type: 'profileCard', id: 'profile', name: '番茄读者', subtitle: '喜欢阅读', badge: '已登录',
+    avatarUrl: 'http://127.0.0.1/avatar', details: [{ label: '用户 ID', value: '12345' }],
+  };
+  const validate = (component) => validateDiscoverResult('org.example.account', '账号数据源', {
+    kind: 'document', document: { components: [component] },
+  });
+  const result = validate(profile);
+  assert.deepEqual(result.document.components[0].details, [{ label: '用户 ID', value: '12345' }]);
+  assert.throws(() => validate({ ...profile, avatarUrl: 'file:///secret.png' }), PluginContentValidationError);
+  assert.throws(() => validate({ ...profile, details: [{ label: '用户 ID' }] }), PluginContentValidationError);
+});
+
 test('cover orientation accepts every host composition and rejects unknown component families', () => {
   const landscape = validateDiscoverResult('org.example.tree', '树数据源', {
     kind: 'document',

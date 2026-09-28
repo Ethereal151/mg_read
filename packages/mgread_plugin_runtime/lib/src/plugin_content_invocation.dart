@@ -583,6 +583,24 @@ final class PluginDiscoveryTextComponent extends PluginDiscoveryComponent {
   final String text;
 }
 
+final class PluginDiscoveryProfileCardComponent
+    extends PluginDiscoveryComponent {
+  PluginDiscoveryProfileCardComponent({
+    required super.id,
+    required this.name,
+    required this.subtitle,
+    required this.badge,
+    required this.avatarUrl,
+    required List<PluginDiscoveryMetric> details,
+  }) : details = List<PluginDiscoveryMetric>.unmodifiable(details);
+
+  final String name;
+  final String? subtitle;
+  final String? badge;
+  final Uri? avatarUrl;
+  final List<PluginDiscoveryMetric> details;
+}
+
 final class PluginDiscoveryDividerComponent extends PluginDiscoveryComponent {
   const PluginDiscoveryDividerComponent({required super.id});
 }
@@ -1078,6 +1096,18 @@ PluginDiscoveryComponent _decodeDiscoveryComponent(
     'text' => PluginDiscoveryTextComponent(
       id: id,
       text: _contentString(item, 'text', context),
+    ),
+    'profileCard' => PluginDiscoveryProfileCardComponent(
+      id: id,
+      name: _contentString(item, 'name', context),
+      subtitle: _contentNullableString(item, 'subtitle', context),
+      badge: _contentNullableString(item, 'badge', context),
+      avatarUrl: _contentNullableUri(item, 'avatarUrl', context),
+      details: _contentList(
+        item,
+        'details',
+        context,
+      ).map(_decodeDiscoveryMetric).toList(growable: false),
     ),
     'divider' => PluginDiscoveryDividerComponent(id: id),
     _ => _contentInvalid('$context has an unknown or misplaced type.'),

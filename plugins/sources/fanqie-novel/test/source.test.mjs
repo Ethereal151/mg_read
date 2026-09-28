@@ -79,6 +79,36 @@ test('Fanqie login opens WebView, checks status, and imports bookshelf IDs throu
   assert.equal(calls.filter(([kind]) => kind === 'navigate').length, 1);
 });
 
+test('Fanqie account page shows only profile fields returned by the browser session', async () => {
+  const proxied = [];
+  let userData = { id: 12345, name: '番茄读者', desc: '喜欢阅读', avatar: 'https://img.example/avatar.png' };
+  await plugin.activate({
+    log: { info() {}, warn() {} },
+    resource: { proxy(value) { proxied.push(value); return 'http://127.0.0.1/avatar'; } },
+    browser: { sessionV1: { async request(request) {
+      assert.equal(request.url, 'https://fanqienovel.com/api/user/info/v2');
+      assert.equal('cookie' in request.headers, false);
+      return { version: 1, status: 200, body: JSON.stringify({ code: 0, data: userData }), headers: {}, finalUrl: request.url };
+    } } },
+  });
+  const account = await plugin.discover({ target: 'login-status', cursor: null, collectionId: null, pageSize: 10 });
+  const [profile, actions] = account.document.components[0].children;
+  assert.equal(profile.type, 'profileCard');
+  assert.equal(profile.name, '番茄读者');
+  assert.equal(profile.subtitle, '喜欢阅读');
+  assert.equal(profile.avatarUrl, 'http://127.0.0.1/avatar');
+  assert.deepEqual(profile.details, [{ label: '用户 ID', value: '12345' }]);
+  assert.deepEqual(actions.children[0].categories.map((item) => item.target), ['bookshelf', 'login']);
+  assert.equal(proxied[0].url, 'https://img.example/avatar.png');
+
+  userData = {};
+  const minimal = await plugin.discover({ target: 'login-status', cursor: null, collectionId: null, pageSize: 10 });
+  const fallback = minimal.document.components[0].children[0];
+  assert.equal(fallback.name, '番茄用户');
+  assert.equal(fallback.avatarUrl, null);
+  assert.deepEqual(fallback.details, []);
+});
+
 test('Fanqie source migrates legacy search payloads and web detail fallback', async () => {
   const resources = [];
   await plugin.activate({

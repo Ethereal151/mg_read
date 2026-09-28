@@ -266,6 +266,17 @@ export interface PluginDiscoveryTextComponent extends JsonObject {
   readonly type: "text";
 }
 
+/** A source-provided identity, rendered and sized by the host. */
+export interface PluginDiscoveryProfileCardComponent extends JsonObject {
+  readonly type: "profileCard";
+  readonly id: string;
+  readonly name: string;
+  readonly subtitle: string | null;
+  readonly badge: string | null;
+  readonly avatarUrl: string | null;
+  readonly details: readonly PluginDiscoveryMetric[];
+}
+
 export interface PluginDiscoveryDividerComponent extends JsonObject {
   readonly id: string;
   readonly type: "divider";
@@ -278,6 +289,7 @@ export type PluginDiscoveryComponent =
   | PluginDiscoveryContentCollectionComponent
   | PluginDiscoveryCategoryCollectionComponent
   | PluginDiscoveryTextComponent
+  | PluginDiscoveryProfileCardComponent
   | PluginDiscoveryDividerComponent;
 
 export interface PluginDiscoveryDocument extends JsonObject {

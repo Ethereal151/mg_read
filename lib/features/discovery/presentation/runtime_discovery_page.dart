@@ -5,6 +5,7 @@
 /// - 转发分类、搜索、详情和导航操作。
 /// - 将递归组件树编排为封面网格、横向书架、紧凑榜单和自适应组合容器。
 /// - 统一递归 section 的主标题、副标题、语义图标和内容间距。
+/// - 将来源资料卡渲染为适配主题的身份摘要，并在头像加载失败时回退。
 /// - 将旧 ranking 布局兼容映射到标准紧凑榜单，避免来源选择宿主尺寸。
 /// - 将加载/空/失败状态交给独立展示组件，保持页面容器聚焦。
 ///
@@ -28,6 +29,7 @@ import 'package:mg_read/features/discovery/presentation/discovery_view_data.dart
 import 'package:mg_read/features/discovery/presentation/widgets/discovery_content_list_item.dart';
 import 'package:mg_read/features/discovery/presentation/widgets/discovery_drag_scroll_behavior.dart';
 import 'package:mg_read/features/discovery/presentation/widgets/discovery_landscape_cover_collection.dart';
+import 'package:mg_read/features/discovery/presentation/widgets/discovery_profile_card.dart';
 import 'package:mg_read/shared/presentation/app_navigation_destination.dart';
 import 'package:mg_read/shared/presentation/widgets/app_bottom_navigation.dart';
 import 'package:mg_read/shared/presentation/widgets/async_book_cover_loader.dart';
@@ -168,7 +170,7 @@ class RuntimeDiscoveryPage extends StatelessWidget {
                                   for (var index = 0; index < components.length; index++) ...<Widget>[
                                     _DiscoveryComponentRenderer(
                                       component: components[index],
-                                      hideSectionTitle: canNavigateBack,
+                                      hideSectionTitle: canNavigateBack && index == 0,
                                       onTabSelected: onTabSelected,
                                       onCategorySelected: onCategorySelected,
                                       onContentPressed: onContentPressed,
@@ -265,6 +267,7 @@ class _DiscoveryComponentRenderer extends StatelessWidget {
         text,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppThemeTokens.of(context).mutedText),
       ),
+      PluginDiscoveryProfileCardComponent profile => DiscoveryProfileCard(profile: profile),
       PluginDiscoveryDividerComponent() => const Divider(),
     },
   );
@@ -289,7 +292,7 @@ class _ChildrenComponent extends StatelessWidget {
           onLoadMore: renderer.onLoadMore,
           loadingCollectionId: renderer.loadingCollectionId,
           isInBookshelf: renderer.isInBookshelf,
-          hideSectionTitle: renderer.hideSectionTitle,
+          hideSectionTitle: false,
         ),
         if (index != children.length - 1) const SizedBox(height: AppSpacing.discoveryComponentGap),
       ],

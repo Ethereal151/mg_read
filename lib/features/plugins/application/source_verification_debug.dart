@@ -66,6 +66,15 @@ Map<String, Object?> _debugDiscoveryComponent(PluginDiscoveryComponent component
         .toList(growable: false),
   },
   PluginDiscoveryTextComponent(:final text) => <String, Object?>{'type': 'text', 'id': component.id, 'text': text},
+  PluginDiscoveryProfileCardComponent(:final name, :final subtitle, :final badge, :final avatarUrl, :final details) => <String, Object?>{
+    'type': 'profileCard',
+    'id': component.id,
+    'name': name,
+    'subtitle': subtitle,
+    'badge': badge,
+    'avatarUrl': avatarUrl?.toString(),
+    'details': details.map((detail) => <String, String>{'label': detail.label, 'value': detail.value}).toList(growable: false),
+  },
   PluginDiscoveryDividerComponent() => <String, Object?>{'type': 'divider', 'id': component.id},
 };
 

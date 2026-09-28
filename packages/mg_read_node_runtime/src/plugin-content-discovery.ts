@@ -221,6 +221,22 @@ function validateDiscoveryComponent(
         text: readRequiredString(raw, "text", MAX_TEXT_METADATA_CHARACTERS),
         type,
       });
+    case "profileCard":
+      return Object.freeze({
+        id,
+        name: readRequiredString(raw, "name", MAX_LABEL_CHARACTERS),
+        subtitle: readNullableString(raw, "subtitle", MAX_TEXT_METADATA_CHARACTERS),
+        badge: readNullableString(raw, "badge", MAX_LABEL_CHARACTERS),
+        avatarUrl: readNullableUrl(raw, "avatarUrl"),
+        details: Object.freeze(readArray(raw, "details", 8).map((entry) => {
+          const detail = readRecord(entry);
+          return Object.freeze({
+            label: readRequiredString(detail, "label", MAX_LABEL_CHARACTERS),
+            value: readRequiredString(detail, "value", MAX_LABEL_CHARACTERS),
+          });
+        })),
+        type,
+      });
     case "divider":
       return Object.freeze({ id, type });
     default:

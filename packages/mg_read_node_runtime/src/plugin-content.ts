@@ -39,6 +39,7 @@ export type {
   PluginDiscoveryGroupLayout,
   PluginDiscoveryIcon,
   PluginDiscoveryMetric,
+  PluginDiscoveryProfileCardComponent,
   PluginDiscoverySectionComponent,
   PluginDiscoveryTab,
   PluginDiscoveryTabsComponent,
