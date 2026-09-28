@@ -1,4 +1,4 @@
-name: Build source collection
+name: Build and publish source collection
 
 on:
   push:
@@ -62,3 +62,67 @@ jobs:
           archive: false
           if-no-files-found: error
           retention-days: 30
+
+  publish:
+    name: Publish source collection release
+    if: github.ref == 'refs/heads/main'
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: source-collection-release-${{ github.sha }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: Download source collection
+        uses: actions/download-artifact@v8
+        with:
+          name: mgread-sources-${{ github.sha }}
+          path: release
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_file="release/mgread-sources.mgplugins"
+          if [[ ! -s "$release_file" ]]; then
+            echo "Source collection is missing or empty: $release_file" >&2
+            exit 1
+          fi
+
+          (
+            cd release
+            sha256sum mgread-sources.mgplugins > SHA256SUMS.txt
+          )
+
+          tag="source-collection-${SOURCE_COMMIT}"
+          title="MgRead source collection (${SOURCE_COMMIT:0:8})"
+          notes="Automated Node source collection built from commit ${SOURCE_COMMIT}."
+
+          if gh release view "$tag" --repo "$REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "$release_file" release/SHA256SUMS.txt \
+              --repo "$REPOSITORY" --clobber
+          else
+            gh release create "$tag" "$release_file" release/SHA256SUMS.txt \
+              --repo "$REPOSITORY" \
+              --target "$SOURCE_COMMIT" \
+              --title "$title" \
+              --notes "$notes" \
+              --latest=false
+          fi
+
+          release_url="$(gh release view "$tag" --repo "$REPOSITORY" --json url --jq .url)"
+          checksum="$(awk '{print $1}' release/SHA256SUMS.txt)"
+          {
+            echo "### Source collection published"
+            echo
+            echo "- Release: [$tag]($release_url)"
+            echo "- Asset: `mgread-sources.mgplugins`"
+            echo "- SHA-256: `$checksum`"
+          } >> "$GITHUB_STEP_SUMMARY"
