@@ -45,12 +45,12 @@ test('AMP continuation drains each page, follows next URLs and excludes already 
  assert.deepEqual(calls.filter(x=>x.pathname.includes('/api/')).map(x=>x.searchParams.get('page')),['2','3']);
 });
 
-test('gatekeeper responses fall back to the public WebView page', async () => {
+test('gatekeeper responses fall back to a hidden public WebView page', async () => {
   const list = await readFile(new URL('./fixtures/list.html', import.meta.url), 'utf8');
   const calls = []; const navigations = []; let currentUrl = 'https://www.baozimh.com/verified';
   const source = new BaozimhSource({
     http: { async fetch(input) { calls.push(new URL(input).toString()); return new Response(JSON.stringify({ challenge_url: '/__gatekeeper_challenge/start?token=fixture', error: 'challenge_required' }), { status: 403 }); } },
-    webview: { async open(options) { assert.deepEqual(options, { visible: false, timeoutMs: 30_000 }); return {
+    webview: { async open(options) { assert.deepEqual(options, { visible: false, timeoutMs: 30_000 }); assert.equal(options.visible, false); return {
       async navigate(url) { navigations.push(url); currentUrl = url.includes('/__gatekeeper_challenge/') ? 'https://www.baozimh.com/verified' : url; }, async getHtml() { return list; }, async getUrl() { return currentUrl; },
     }; } },
     errors: { raise(error) { throw new Error(`${error.code}:${error.message}`); } },
