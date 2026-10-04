@@ -1,9 +1,9 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
 // src/index.mts
-var site = "https://www.deqixs.cc";
+var site = "https://www.deqixss.com";
 var agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36";
-var headers = { "User-Agent": agent, Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", "Accept-Language": "zh-CN,zh;q=0.9", Referer: `${site}/` };
+var headers = { "User-Agent": agent, Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", "Accept-Language": "zh-CN,zh;q=0.9", Referer: `${site}/`, "Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Dest": "empty" };
 var channels = [{ id: "0", title: "全部" }, { id: "1", title: "玄幻" }, { id: "2", title: "都市" }, { id: "3", title: "仙侠" }, { id: "4", title: "历史" }, { id: "5", title: "科幻" }, { id: "6", title: "诸天" }, { id: "7", title: "悬疑" }, { id: "8", title: "体育" }, { id: "9", title: "游戏" }, { id: "10", title: "综合" }];
 var context;
 var cache = /* @__PURE__ */ new Map();
