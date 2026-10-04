@@ -1,12 +1,15 @@
 {
   "name": "@mgread-plugin/midu-novel",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "Native MgRead source for Midu novels.",
   "type": "module",
   "main": "dist/index.mjs",
   "packageManager": "npm@11.19.1",
-  "engines": { "node": ">=24", "npm": "11.13.0 || 11.19.1" },
+  "engines": {
+    "node": ">=24",
+    "npm": "11.13.0 || 11.19.1"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json && node tools/mgread.mjs build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -27,7 +30,10 @@
     "displayName": "米读小说",
     "description": "米读小说数据源，支持发现、分类、搜索、详情、目录与正文阅读。",
     "pluginApi": 1,
-    "packageMode": "single-file","icon":"assets/icon.png",
-    "contentKinds": ["novel"]
+    "packageMode": "single-file",
+    "icon": "assets/icon.png",
+    "contentKinds": [
+      "novel"
+    ]
   }
 }

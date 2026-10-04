@@ -25,6 +25,9 @@ type BookProjection = {
 type CatalogProjection = { readonly title: string; readonly rows: readonly Json[] };
 
 const apiBase = 'https://api.midukanshu.com';
+// The production Runtime's HTTP/2 transport stalls on this endpoint, while
+// the same upstream HTTP endpoint returns the valid recommendation payload.
+const recommendationApi = 'http://api.midukanshu.com/fiction/recommend/searchPage';
 const saasBase = 'https://saasapi.midukanshu.com';
 const h5Base = 'https://m.midukanshu.com';
 const staticBase = 'https://book.midukanshu.com';
@@ -180,7 +183,7 @@ async function searchBooks(query: string, page: number): Promise<BookProjection[
 }
 
 async function recommendations(): Promise<BookProjection[]> {
-  const payload = await postForm(`${apiBase}/fiction/recommend/searchPage`, new URLSearchParams(), `${h5Base}/novel/index.html`);
+  const payload = await postForm(recommendationApi, new URLSearchParams(), `${h5Base}/novel/index.html`);
   const data = isRecord(payload.data) ? payload.data : {};
   const nodes = Array.isArray(data.recommendNode) ? data.recommendNode : [];
   const result: BookProjection[] = [];
