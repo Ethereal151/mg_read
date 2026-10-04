@@ -21,6 +21,7 @@ type BrowserStage = 'page_open' | 'ready' | 'initial_fetch' | 'verification' | '
 
 const origin = 'https://www.bz777777777.com';
 const browserTimeoutMs = 120000;
+const verificationWaitMs = 90000;
 const listing = Object.freeze({ namespace: 'listing', staleAfterMs: 10 * 60 * 1000, serveStaleWhileRevalidate: true });
 const detail = Object.freeze({ namespace: 'detail', staleAfterMs: 60 * 60 * 1000, allowStaleOnError: false });
 const catalog = Object.freeze({ namespace: 'catalog', staleAfterMs: 60 * 60 * 1000, allowStaleOnError: false });
@@ -116,14 +117,10 @@ export class BzSource {
     let html = await page.getHtml({ timeoutMs: browserTimeoutMs });
     if (isChallenge(html)) {
       this.context.log.warn('source_browser_challenge_detected');
-      try {
-        await page.show({ timeoutMs: browserTimeoutMs });
-        this.context.log.info('source_browser_verification_wait_started');
-        await this.#waitForVerification(page);
-      } catch (error) {
-        this.#raiseAccessBlocked();
-        throw error;
-      }
+      await page.show({ timeoutMs: browserTimeoutMs });
+      this.context.log.info('source_browser_verification_wait_started');
+      const verified = await this.#waitForVerification(page);
+      if (!verified) this.#raiseAccessBlocked();
       this.context.log.info('source_browser_verification_wait_completed');
       const current = new URL(await page.getUrl({ timeoutMs: browserTimeoutMs })); if (current.origin !== origin) throw new Error('Browser verification left the source origin.');
       html = await page.getHtml({ timeoutMs: browserTimeoutMs }); if (isChallenge(html)) this.#raiseAccessBlocked();
@@ -139,13 +136,13 @@ export class BzSource {
     });
   }
 
-  async #waitForVerification(page: WebViewPage) {
-    const deadline = Date.now() + browserTimeoutMs;
+  async #waitForVerification(page: WebViewPage): Promise<boolean> {
+    const deadline = Date.now() + verificationWaitMs;
     while (Date.now() < deadline) {
       await delay(1000);
-      if (!isChallenge(await page.getHtml({ timeoutMs: browserTimeoutMs }))) return;
+      if (!isChallenge(await page.getHtml({ timeoutMs: browserTimeoutMs }))) return true;
     }
-    throw new Error('Browser verification is incomplete.');
+    return false;
   }
 
   async #fetchWithDiagnostics(page: WebViewPage, url: URL, method: 'GET' | 'POST', body: string | null, attempt: 'initial' | 'retry') { this.context.log.info(`source_browser_${attempt}_fetch_started`); const response = await this.#fetch(page, url, method, body); this.context.log.info(`source_browser_${attempt}_fetch_completed_${statusClass(response.status)}`); return response; }

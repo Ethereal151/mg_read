@@ -66,7 +66,7 @@ test('browser fixture covers search detail full catalog text and cover proxy', a
   assert.ok(calls.some(call => call.operation === 'open'));
 });
 
-test('protected challenge becomes a stable source access error when verification cannot start', async () => {
+test('protected challenge preserves host interaction-required when visible verification cannot start', async () => {
   const plugin = await import(`../dist/index.mjs?blocked=${Date.now()}`);
   const cacheDir = await mkdtemp(join(tmpdir(), 'bz-blocked-cache-'));
   try {
@@ -75,7 +75,7 @@ test('protected challenge becomes a stable source access error when verification
       async getHtml() { return challenge; },
       async fetch() { return { status: 403, url: origin, headers: {}, body: challenge }; },
       async getUrl() { return origin; },
-      async show() { throw new Error('visible browser interaction is unavailable'); },
+       async show() { const error = new Error('visible browser interaction is unavailable'); error.name = 'PluginManagerError'; error.code = 'interaction_required'; throw error; },
       async hide() {},
     };
     const raised = [];
@@ -99,10 +99,10 @@ test('protected challenge becomes a stable source access error when verification
     });
     await assert.rejects(
       () => plugin.discover({ target: null, cursor: null, collectionId: null, pageSize: 10 }),
-      (error) => error?.code === 'source_access_blocked'
-        && error?.detail === '访问异常，请完成来源页面的浏览器验证后重试。\n注释：检测到来源的安全验证页面；请在来源页面完成验证，然后点击“刷新”。',
+      (error) => error?.code === 'interaction_required'
+        && error?.message === 'visible browser interaction is unavailable',
     );
-    assert.equal(raised[0].code, 'source_access_blocked');
+    assert.equal(raised.length, 0);
   } finally {
     await rm(cacheDir, { recursive: true, force: true });
   }
