@@ -71,8 +71,9 @@ export async function search(request: { query: string; cursor: string | null; pa
   const rows = settled.flatMap((result) => result.status === 'fulfilled' ? indexedList(result.value) : []);
   const unique = new Map<string, ReturnType<typeof projectVideo>>();
   for (const row of rows) {
-    const item = projectVideo(row);
-    if (item === null || !searchable(row).includes(query)) continue;
+    if (!searchable(row).includes(query)) continue;
+    const item = await playableItem(row);
+    if (item === null) continue;
     unique.set(item.id, item);
     if (unique.size >= limit) break;
   }
@@ -97,7 +98,7 @@ export async function discover(request: {
     const components: object[] = [];
     if (latest.length > 0) {
       components.push({
-        type: 'section', id: 'fanshu-latest', title: '最新更新', subtitle: '番薯动漫当前更新', icon: 'newRelease',
+        type: 'section', id: 'fanshu-latest', title: '最新更新', subtitle: '番薯动漫当前更新', icon: 'video',
         children: [{
           type: 'contentCollection', id: 'fanshu-latest-list', layout: 'coverGrid', continuation: null,
           items: latest.map((content) => frozen({ content, rank: null, metric: null, recommendation: null })),
@@ -158,13 +159,13 @@ export async function getChapters(request: { id: string }) {
       const episodeTitle = clean(text(episode.name ?? episode.title)) || `第${episodeIndex}集`;
       return [frozen({
         id: chapterId(id, sourceId, episodeId, episodeIndex), title: episodeTitle, order,
-        url: `yoapp://play?vod_id=${id}&source=${encodeURIComponent(sourceId)}&episode_id=${encodeURIComponent(episodeId)}&episode_index=${encodeURIComponent(episodeIndex)}`,
+        url: null,
         volumeTitle: title, wordCount: null, updatedAt: null, isLocked: null, attributes: [],
       })];
     });
     if (episodes.length === 0) return [];
     return [frozen({ id: `group:${id}:${encodeURIComponent(sourceId)}`, title, order: groupOrder, episodes })];
-  });
+  }).map((group, order) => frozen({ ...group, order }));
   const items = groups.flatMap((group) => group.episodes).map((episode, order) => frozen({ ...episode, order }));
   if (items.length === 0) throw new Error('No playable episodes found.');
   return frozen({ items, groups });
@@ -212,10 +213,21 @@ async function listCategory(category: Category, page: number, pageSize: number) 
   const params = action === 'weekly_rankings'
     ? { type_id: typeId, limit: String(pageSize) }
     : { type_id: typeId, page: String(page), page_size: String(pageSize), sort };
-  return indexedList(await apiGet(action, params)).flatMap((row) => {
-    const item = projectVideo(row);
-    return item === null ? [] : [item];
-  });
+  const items = [] as ReturnType<typeof projectVideo>[];
+  for (const row of indexedList(await apiGet(action, params))) {
+    const item = await playableItem(row);
+    if (item !== null) items.push(item);
+  }
+  return items;
+}
+
+async function playableItem(row: Json) {
+  const nativeId = text(row.vod_id ?? row.id);
+  if (!/^\d+$/u.test(nativeId)) return null;
+  const value = await detail(nativeId);
+  const sources = array(value.play_sources ?? value.playSources).filter(isRecord);
+  if (!sources.some((source) => array(source.episodes).some(isRecord))) return null;
+  return projectVideo(value);
 }
 
 async function detail(id: string): Promise<Json> {
@@ -238,11 +250,11 @@ function projectVideo(value: Json) {
   return frozen({
     id: `video:${nativeId}`, title, contentKind: 'video' as const, coverOrientation: 'portrait' as const,
     author: clean(text(value.vod_actor ?? value.vod_director)) || null,
-    url: `yoapp://vod/${nativeId}`,
+    url: null,
     coverUrl: cover === '' ? null : requireContext().resource.proxy({ kind: 'image', url: cover, headers: { Referer: `${hosts[0]}/` } }),
     description: clean(text(value.vod_blurb ?? value.vod_content ?? value.description)) || null,
     language: clean(text(value.vod_lang)) || 'zh-CN', status: 'unknown' as const, access: 'unknown' as const,
-    wordCount: null, chapterCount: null, publishedAt: null, updatedAt: clean(text(value.vod_time ?? value.update_time)) || null,
+    wordCount: null, chapterCount: null, publishedAt: null, updatedAt: timestamp(value.vod_time ?? value.update_time),
     latestChapter: latest === '' ? null : { id: null, title: latest, url: null, updatedAt: null },
     categories: categoriesValue, tags: categoriesValue, attributes: [],
   });
@@ -458,6 +470,17 @@ function cursorPage(cursor: string | null, scope: string): number { if (cursor =
 function uniqueText(values: readonly string[]): string[] { const result: string[] = []; for (const value of values.map(clean)) if (value !== '' && !result.includes(value)) result.push(value); return result; }
 function clean(value: string): string { return value.replace(/<[^>]*>/gu, ' ').replace(/[\s\u3000\u00a0]+/gu, ' ').trim(); }
 function text(value: unknown): string { return typeof value === 'string' || typeof value === 'number' ? String(value) : ''; }
+function timestamp(value: unknown): string | null {
+  const raw = text(value).trim();
+  if (raw === '') return null;
+  const numeric = Number(raw);
+  const milliseconds = /^\d+(?:\.\d+)?$/u.test(raw) && Number.isFinite(numeric)
+    ? numeric < 100_000_000_000 ? numeric * 1000 : numeric
+    : Date.parse(raw);
+  if (!Number.isFinite(milliseconds)) return null;
+  const date = new Date(milliseconds);
+  return Number.isNaN(date.valueOf()) ? null : date.toISOString();
+}
 function array(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }
 function isRecord(value: unknown): value is Json { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 function clamp(value: number): number { return Math.max(1, Math.min(50, Math.floor(value))); }

@@ -53,8 +53,9 @@ async function search(request) {
   const rows = settled.flatMap((result) => result.status === "fulfilled" ? indexedList(result.value) : []);
   const unique = /* @__PURE__ */ new Map();
   for (const row of rows) {
-    const item = projectVideo(row);
-    if (item === null || !searchable(row).includes(query)) continue;
+    if (!searchable(row).includes(query)) continue;
+    const item = await playableItem(row);
+    if (item === null) continue;
     unique.set(item.id, item);
     if (unique.size >= limit) break;
   }
@@ -76,7 +77,7 @@ async function discover(request) {
         id: "fanshu-latest",
         title: "最新更新",
         subtitle: "番薯动漫当前更新",
-        icon: "newRelease",
+        icon: "video",
         children: [{
           type: "contentCollection",
           id: "fanshu-latest-list",
@@ -148,7 +149,7 @@ async function getChapters(request) {
         id: chapterId(id, sourceId, episodeId, episodeIndex),
         title: episodeTitle,
         order,
-        url: `yoapp://play?vod_id=${id}&source=${encodeURIComponent(sourceId)}&episode_id=${encodeURIComponent(episodeId)}&episode_index=${encodeURIComponent(episodeIndex)}`,
+        url: null,
         volumeTitle: title,
         wordCount: null,
         updatedAt: null,
@@ -158,7 +159,7 @@ async function getChapters(request) {
     });
     if (episodes.length === 0) return [];
     return [frozen({ id: `group:${id}:${encodeURIComponent(sourceId)}`, title, order: groupOrder, episodes })];
-  });
+  }).map((group, order) => frozen({ ...group, order }));
   const items = groups.flatMap((group) => group.episodes).map((episode, order) => frozen({ ...episode, order }));
   if (items.length === 0) throw new Error("No playable episodes found.");
   return frozen({ items, groups });
@@ -211,10 +212,20 @@ async function getContent(request) {
 async function listCategory(category, page, pageSize) {
   const [, , action, typeId, sort] = category;
   const params = action === "weekly_rankings" ? { type_id: typeId, limit: String(pageSize) } : { type_id: typeId, page: String(page), page_size: String(pageSize), sort };
-  return indexedList(await apiGet(action, params)).flatMap((row) => {
-    const item = projectVideo(row);
-    return item === null ? [] : [item];
-  });
+  const items = [];
+  for (const row of indexedList(await apiGet(action, params))) {
+    const item = await playableItem(row);
+    if (item !== null) items.push(item);
+  }
+  return items;
+}
+async function playableItem(row) {
+  const nativeId = text(row.vod_id ?? row.id);
+  if (!/^\d+$/u.test(nativeId)) return null;
+  const value = await detail(nativeId);
+  const sources = array(value.play_sources ?? value.playSources).filter(isRecord);
+  if (!sources.some((source) => array(source.episodes).some(isRecord))) return null;
+  return projectVideo(value);
 }
 async function detail(id) {
   const cached = details.get(id);
@@ -238,7 +249,7 @@ function projectVideo(value) {
     contentKind: "video",
     coverOrientation: "portrait",
     author: clean(text(value.vod_actor ?? value.vod_director)) || null,
-    url: `yoapp://vod/${nativeId}`,
+    url: null,
     coverUrl: cover === "" ? null : requireContext().resource.proxy({ kind: "image", url: cover, headers: { Referer: `${hosts[0]}/` } }),
     description: clean(text(value.vod_blurb ?? value.vod_content ?? value.description)) || null,
     language: clean(text(value.vod_lang)) || "zh-CN",
@@ -247,7 +258,7 @@ function projectVideo(value) {
     wordCount: null,
     chapterCount: null,
     publishedAt: null,
-    updatedAt: clean(text(value.vod_time ?? value.update_time)) || null,
+    updatedAt: timestamp(value.vod_time ?? value.update_time),
     latestChapter: latest === "" ? null : { id: null, title: latest, url: null, updatedAt: null },
     categories: categoriesValue,
     tags: categoriesValue,
@@ -293,14 +304,14 @@ async function loadAuth() {
   const verify = isRecord(config.system_verify) ? config.system_verify : {};
   const appSignature = text(verify.app_signature_sha256) || fallbackAppSignature;
   const body = JSON.stringify({ device_id: clientDeviceId, ip: Buffer.from("124.165.51.5").toString("base64") });
-  const timestamp = String(Date.now());
+  const timestamp2 = String(Date.now());
   const nonce = randomBytes(16).toString("hex");
-  const message = ["POST", apiPath, "device_secret", clientDeviceId, timestamp, nonce, shaHex("action=device_secret"), shaHex(body)].join("\n");
+  const message = ["POST", apiPath, "device_secret", clientDeviceId, timestamp2, nonce, shaHex("action=device_secret"), shaHex(body)].join("\n");
   const headers = baseHeaders({
     ...guards,
     "X-API-TOKEN": token,
     "X-Yoapp-Device-Id": clientDeviceId,
-    "X-Yoapp-Timestamp": timestamp,
+    "X-Yoapp-Timestamp": timestamp2,
     "X-Yoapp-Nonce": nonce,
     "X-Yoapp-Sign": hmacBase64Url(message, bootstrapKey)
   });
@@ -319,14 +330,14 @@ async function loadAuth() {
 }
 async function apiGetWithKey(action, params, deviceId, activeSignKey, guards) {
   const all = { action, token, ...params };
-  const timestamp = String(Date.now());
+  const timestamp2 = String(Date.now());
   const nonce = randomBytes(16).toString("hex");
   const canonical = Object.keys(all).filter((key) => key !== "token" && key !== "sign").sort().map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(all[key] ?? "")}`).join("&");
-  const message = ["GET", apiPath, action, deviceId, timestamp, nonce, shaHex(canonical), shaHex("")].join("\n");
+  const message = ["GET", apiPath, action, deviceId, timestamp2, nonce, shaHex(canonical), shaHex("")].join("\n");
   const headers = baseHeaders({
     ...guards,
     "X-Yoapp-Device-Id": deviceId,
-    "X-Yoapp-Timestamp": timestamp,
+    "X-Yoapp-Timestamp": timestamp2,
     "X-Yoapp-Nonce": nonce,
     "X-Yoapp-Sign": hmacBase64Url(message, activeSignKey)
   });
@@ -459,6 +470,15 @@ function clean(value) {
 }
 function text(value) {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
+}
+function timestamp(value) {
+  const raw = text(value).trim();
+  if (raw === "") return null;
+  const numeric = Number(raw);
+  const milliseconds = /^\d+(?:\.\d+)?$/u.test(raw) && Number.isFinite(numeric) ? numeric < 1e11 ? numeric * 1e3 : numeric : Date.parse(raw);
+  if (!Number.isFinite(milliseconds)) return null;
+  const date = new Date(milliseconds);
+  return Number.isNaN(date.valueOf()) ? null : date.toISOString();
 }
 function array(value) {
   return Array.isArray(value) ? value : [];

@@ -1,12 +1,15 @@
 {
   "name": "@mgread-plugin/fanshu-anime",
-  "version": "1.0.1",
+  "version": "1.0.6",
   "private": true,
   "description": "Native MgRead source for Fanshu Anime's current Yoapp API.",
   "type": "module",
   "main": "dist/index.mjs",
   "packageManager": "npm@11.19.1",
-  "engines": { "node": ">=24", "npm": "11.13.0 || 11.19.1" },
+  "engines": {
+    "node": ">=24",
+    "npm": "11.13.0 || 11.19.1"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json && node tools/mgread.mjs build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -27,7 +30,10 @@
     "displayName": "番薯动漫",
     "description": "番薯动漫视频数据源，支持分类、搜索、详情、分组目录与视频播放。",
     "pluginApi": 1,
-    "packageMode": "single-file","icon":"assets/icon.png",
-    "contentKinds": ["video"]
+    "packageMode": "single-file",
+    "icon": "assets/icon.png",
+    "contentKinds": [
+      "video"
+    ]
   }
 }
