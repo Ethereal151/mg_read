@@ -18,6 +18,7 @@ test('fixture chain covers discovery, search, detail, complete gallery and resou
   assert.ok(requested.some((url) => url.pathname === '/category/video-cosplayyy/'));
   assert.ok(requested.some((url) => url.pathname === '/category/cosplay-nudee/'));
   const search = await plugin.search({ query: 'fixture', cursor: null, pageSize: 20 }); assert.equal(search.items[0].title, 'Fixture Gallery'); assert.match(search.items[0].id, /^post:/u); assert.match(search.items[0].coverUrl, /^http:\/\/127\.0\.0\.1\/resource\//u);
+  await plugin.search({ query: 'Machi馬吉 cosplay The Herta Swimsuit – Honkai:Star Rail “42 photos”', cursor: null, pageSize: 20 }); assert.equal(new URL(requested.at(-1)).searchParams.get('s'), 'Machi馬吉 cosplay The Herta Swimsuit');
   const detailResult = await plugin.getDetail({ id: search.items[0].id }); assert.equal(detailResult.author, 'Fixture Author'); assert.equal(detailResult.chapterCount, 1);
   const chapters = await plugin.getChapters({ id: detailResult.id }); assert.equal(chapters.items.length, 1);
   const content = await plugin.getContent({ id: detailResult.id, chapterId: chapters.items[0].id }); assert.equal(content.text, null); assert.equal(content.pages.length, 2); assert.ok(content.pages.every((page) => page.url.startsWith('http://127.0.0.1/resource/')));

@@ -9122,8 +9122,8 @@ var require_util2 = __commonJS({
         request.headersList.append("origin", serializedOrigin, true);
       }
     }
-    function coarsenTime(timestamp, crossOriginIsolatedCapability) {
-      return timestamp;
+    function coarsenTime(timestamp2, crossOriginIsolatedCapability) {
+      return timestamp2;
     }
     function clampAndCoarsenConnectionTimingInfo(connectionTimingInfo, defaultStartTime, crossOriginIsolatedCapability) {
       if (!connectionTimingInfo?.startTime || connectionTimingInfo.startTime < defaultStartTime) {
@@ -19151,11 +19151,11 @@ var require_dns = __commonJS({
         return ip;
       }
       setRecords(origin, addresses) {
-        const timestamp = Date.now();
+        const timestamp2 = Date.now();
         const records = { records: { 4: null, 6: null } };
         let minTTL = this.#maxTTL;
         for (const record of addresses) {
-          record.timestamp = timestamp;
+          record.timestamp = timestamp2;
           if (typeof record.ttl === "number") {
             record.ttl = Math.min(record.ttl, this.#maxTTL);
             minTTL = Math.min(minTTL, record.ttl);
@@ -44821,7 +44821,7 @@ function paged(path, page) {
   return path.replace(/\.html$/u, `/${page}.html`);
 }
 function summary(value) {
-  return frozen({ id: `manga:${encode(value.path)}`, title: value.title, contentKind: "manga", coverOrientation: "portrait", author: value.author || null, url: new URL(value.path, base).toString(), coverUrl: proxyImage(value.cover, value.path), description: null, language: "zh-CN", status: "completed", access: "free", wordCount: null, chapterCount: 1, publishedAt: null, updatedAt: value.date || null, latestChapter: { id: `manga:${encode(value.path)}:main`, title: value.remark || "全部", url: null, updatedAt: null }, categories: value.category ? [value.category] : [], tags: ["写真", "套图"], attributes: [] });
+  return frozen({ id: `manga:${encode(value.path)}`, title: value.title, contentKind: "manga", coverOrientation: "portrait", author: value.author || null, url: new URL(value.path, base).toString(), coverUrl: proxyImage(value.cover, value.path), description: null, language: "zh-CN", status: "completed", access: "free", wordCount: null, chapterCount: 1, publishedAt: null, updatedAt: value.date ? timestamp(value.date) : null, latestChapter: { id: `manga:${encode(value.path)}:main`, title: value.remark || "全部", url: null, updatedAt: null }, categories: value.category ? [value.category] : [], tags: ["写真", "套图"], attributes: [] });
 }
 function proxyImage(value, path) {
   if (!value) return null;
@@ -44834,6 +44834,13 @@ function absolute(value) {
 function imageMime(url) {
   const path = new URL(url).pathname.toLowerCase();
   return path.endsWith(".png") ? "image/png" : path.endsWith(".webp") ? "image/webp" : "image/jpeg";
+}
+function timestamp(value) {
+  const match = /^(\d{4})\.(\d{2})\.(\d{2})$/u.exec(value);
+  if (match === null) throw new Error("Source date is invalid.");
+  const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]), date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) throw new Error("Source date is invalid.");
+  return date.toISOString();
 }
 function contentPath(id) {
   const value = /^manga:([A-Za-z0-9_-]+)$/u.exec(id)?.[1], path = value ? decode(value) : "";
