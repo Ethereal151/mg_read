@@ -38,16 +38,26 @@ async function discover(request) {
   }
   return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title: channel.title, subtitle: null, icon: "video", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
 }
+function publicTitle(value) {
+  let result = "";
+  for (const character of value) {
+    if (result.length + character.length > 256) break;
+    result += character;
+  }
+  return result.trim();
+}
 async function getDetail(request) {
   const id = contentId(request.id), source = await html(`/voddetail/${id}/`), parsed = detail(source, id), episodes = parseEpisodes(source);
-  return frozen({ ...summary(parsed), description: parsed.remark, chapterCount: episodes.length, aliases: [], catalogUrl: `${await currentBase()}/voddetail/${id}/` });
+  parsed.title = publicTitle(parsed.title) || id;
+  const item = summary(parsed), latestChapter = item.latestChapter ? frozen({ ...item.latestChapter, title: publicTitle(item.latestChapter.title) }) : null;
+  return frozen({ ...item, latestChapter, description: parsed.remark, chapterCount: episodes.length, aliases: [], catalogUrl: `${await currentBase()}/voddetail/${id}/` });
 }
 async function getChapters(request) {
-  const id = contentId(request.id), episodes = parseEpisodes(await html(`/voddetail/${id}/`)), items = episodes.map((episode, index) => frozen({ id: `video:${id}:${episode.line}:${episode.number}`, title: episode.title, order: index, url: null, volumeTitle: episode.group, wordCount: null, updatedAt: null, isLocked: false, attributes: [] })), groups = [...new Set(episodes.map((value) => value.group))].map((title, index) => frozen({ id: `group:${id}:${index}`, title, order: index, episodes: items.filter((item) => item.volumeTitle === title) }));
+  const id = contentId(request.id), episodes = parseEpisodes(await html(`/voddetail/${id}/`)), items = episodes.map((episode, index) => frozen({ id: `video:${id}:${episode.line}:${episode.number}`, title: episode.title, order: index, url: null, volumeTitle: episode.group, wordCount: null, updatedAt: null, isLocked: false, attributes: [] })), groups = [...new Set(episodes.map((value) => value.group))].map((title, index) => frozen({ id: `group:${id}:${index}`, title, order: index, episodes: items.filter((item) => item.volumeTitle === title).map((item, order) => frozen({ ...item, order })) }));
   return frozen({ items, groups });
 }
 async function getContent(request) {
-  const id = contentId(request.id), episode = chapterKey(request.chapterId, id), pageUrl = `${await currentBase()}/vodplay/${id}-${episode.line}-${episode.number}/`, source = await html(pageUrl), raw = source.match(/player_aaaa\s*=\s*(\{[\s\S]*?\})\s*(?:<\/script>|;)/u)?.[1];
+  const id = contentId(request.id), episode = chapterKey(request.chapterId, id), pageUrl = `${await currentBase()}/vodplay/${id}-${episode.line}-${episode.number}/`, source = await requestText(pageUrl, headers(`${base}/`)), normalized = source.replaceAll('\\"', '"').replaceAll("\\/", "/"), raw = normalized.match(/player_aaaa\s*=\s*(\{[\s\S]*?\})\s*(?:<\/script>|;)/u)?.[1];
   if (!raw) throw new Error("Player data is unavailable.");
   let data;
   try {
@@ -121,7 +131,7 @@ function parseItems(source) {
     if (!id) continue;
     const title = clean(pick(block, /<a\b[^>]*title="([^"]+)"/u) || pick(block, /<div\b[^>]*hl-item-title[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/u));
     if (!title) continue;
-    result.set(id, { id, title, cover: absolute(pick(block, /data-original="([^"]+)"/u) || pick(block, /src="([^"]+)"/u)), author: clean(pick(block, /class="[^"]*hl-item-sub[^"]*"[^>]*>([\s\S]*?)<\/div>/u)), remark: clean(pick(block, /class="[^"]*remarks[^"]*"[^>]*>([\s\S]*?)<\/span>/u)), category: clean(pick(block, /class="[^"]*state[^"]*"[^>]*>([\s\S]*?)<\/span>/u)) });
+    result.set(id, { id, title, cover: absolute(pick(block, /data-original="([^"]+)"/u) || pick(block, /src="([^"]+)"/u)), author: clean(pick(block, /<p\b[^>]*class="(?=[^"]*\bhl-item-sub\b)(?=[^"]*\bhl-text-muted\b)(?=[^"]*\bhl-hidden-xs\b)[^"]*"[^>]*>([\s\S]*?)<\/p>/u)), remark: clean(pick(block, /class="[^"]*remarks[^"]*"[^>]*>([\s\S]*?)<\/span>/u)), category: clean(pick(block, /class="[^"]*state[^"]*"[^>]*>([\s\S]*?)<\/span>/u)) });
   }
   return [...result.values()];
 }
