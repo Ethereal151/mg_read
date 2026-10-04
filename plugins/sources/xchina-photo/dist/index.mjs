@@ -44721,7 +44721,7 @@ var import_whatwg_mimetype = __toESM(require_mime_type(), 1);
 import { Writable as Writable2, finished } from "node:stream";
 
 // src/index.mts
-var base = "https://xchina001.online";
+var base = "https://xchina001.ink";
 var headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36", Accept: "text/html,application/xhtml+xml,*/*;q=0.8", Referer: `${base}/photos.html` };
 var channels = [["latest", "最新", "/photos/"], ["hot", "热门", "/photos/sort-hot/"], ["comment", "评论最多", "/photos/sort-comment/"], ["recent", "最近评论", "/photos/sort-recent/"]];
 var context;
