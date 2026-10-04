@@ -16,14 +16,28 @@ async function search(request) {
   const query = request.query.trim();
   if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   await ensureBase();
-  const page = cursorPage(request.cursor, "search"), size = clamp(request.pageSize), url = `${base}/search/${encodeURIComponent(query)}/${page > 1 ? `page/${page}/` : ""}`;
-  let parsed = [];
-  try {
-    parsed = parseList(await fetchText(url));
-  } catch {
+  const page = cursorPage(request.cursor, "search"), size = clamp(request.pageSize);
+  let values = [];
+  for (const candidate of searchCandidates(query)) {
+    const url = `${base}/search/${encodeURIComponent(candidate)}/${page > 1 ? `page/${page}/` : ""}`;
+    try {
+      values = parseList(await fetchText(url));
+    } catch {
+      values = [];
+    }
+    if (values.length === 0) values = await fetchPosts(page, size, candidate);
+    if (values.length > 0) break;
   }
-  const values = parsed.length > 0 ? parsed.slice(0, size) : (await fetchPosts(page, size, query)).slice(0, size);
+  values = values.slice(0, size);
   return frozen({ items: values, nextCursor: values.length >= size ? `search:${page + 1}` : null, totalCount: null });
+}
+function searchCandidates(query) {
+  const values = /* @__PURE__ */ new Set([query]);
+  const unwrapped = query.replace(/^[《「『【](.*)[》」』】]$/u, "$1");
+  if (unwrapped !== query) values.add(unwrapped);
+  const prefix = query.split(/[：:（(]/u, 1)[0]?.trim();
+  if (prefix !== void 0 && prefix.length >= 2) values.add(prefix);
+  return [...values].filter((value) => value.length >= 2).slice(0, 3);
 }
 async function searchSuggestions(_request) {
   return frozen({ items: [], nextCursor: null });

@@ -81,7 +81,7 @@ function summary(value) {
   const native = text(first(value.id, value.mediaId));
   if (native === "") throw new Error("Source item has no ID.");
   const id = encodeKey(native), mediaType = object(value.mediaType), genres = strings(value.genres), categories2 = [text(mediaType.name), text(value.region), text(value.releaseYear), ...genres, ...records(value.mediaCategories).map((item) => text(item.name))].filter(Boolean);
-  return frozen({ id: `video:${id}`, title: text(first(value.title, value.mediaName)) || native, contentKind: "video", coverOrientation: "portrait", author: join(first(value.directors, value.actors)), url: `${base}/play/${encodeURIComponent(native)}`, coverUrl: proxyImage(first(value.posterUrlS3, value.posterUrl, value.coverUrl, value.backdropUrlS3, value.backdropUrl)), description: nullable(first(value.overview, value.description, value.originalTitle)), language: "zh-CN", status: "unknown", access: "unknown", wordCount: null, chapterCount: null, publishedAt: null, updatedAt: null, latestChapter: null, categories: [...new Set(categories2)], tags: [], attributes: [] });
+  return frozen({ id: `video:${id}`, title: text(first(value.title, value.mediaName)) || native, contentKind: "video", coverOrientation: "portrait", author: nullable(boundedLabel(join(first(value.directors, value.actors)))), url: `${base}/play/${encodeURIComponent(native)}`, coverUrl: proxyImage(first(value.posterUrlS3, value.posterUrl, value.coverUrl, value.backdropUrlS3, value.backdropUrl)), description: nullable(first(value.overview, value.description, value.originalTitle)), language: "zh-CN", status: "unknown", access: "unknown", wordCount: null, chapterCount: null, publishedAt: null, updatedAt: null, latestChapter: null, categories: [...new Set(categories2)], tags: [], attributes: [] });
 }
 function projectGroup(id, group, index) {
   const line = lineKey(group, index), title = text(first(group.lineName, group.name, group.resolutionName)) || `线路${index + 1}`, episodes = records(group.videoList).map((video, videoIndex) => {
@@ -144,6 +144,14 @@ function uniqueById(values) {
 }
 function join(value) {
   return Array.isArray(value) ? value.map(text).filter(Boolean).join("、") : text(value);
+}
+function boundedLabel(value) {
+  let result = "";
+  for (const character of value) {
+    if (result.length + character.length > 256) break;
+    result += character;
+  }
+  return result.trim();
 }
 function strings(value) {
   return Array.isArray(value) ? value.map(text).filter(Boolean) : [];

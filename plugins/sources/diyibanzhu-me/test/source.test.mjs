@@ -51,7 +51,7 @@ async function fixture(t, options = {}) {
       }
     },
     async getUrl(callOptions) { record('getUrl', callOptions); return currentUrl; },
-    async show(callOptions) { record('show', callOptions); },
+    async show(callOptions) { record('show', callOptions); if (options.failShow === true) { const error = new Error('visible browser interaction is unavailable'); error.name = 'PluginManagerError'; error.code = 'interaction_required'; throw error; } },
     async hide(callOptions) { record('hide', callOptions); },
   };
   await plugin.activate({
@@ -65,6 +65,7 @@ async function fixture(t, options = {}) {
       warn(message) { logs.push({ level: 'warn', message }); },
       error(message) { logs.push({ level: 'error', message }); },
     },
+    errors: { raise(error) { const raised = new Error(error.message); raised.code = error.code; raised.detail = error.annotation === undefined ? error.message : `${error.message}\n注释：${error.annotation}`; throw raised; } },
     resource: { proxy() { return 'http://127.0.0.1/resource'; } },
     http: { async fetch() { return new Response(new Uint8Array()); } },
     webview: { async open(openOptions) { record('open', openOptions); return page; } },
@@ -129,6 +130,15 @@ test('initial verification shows the page only while needed and hides it after s
   assert.equal(calls.filter(call => call.operation === 'show').length, 1);
   assert.equal(calls.filter(call => call.operation === 'hide').length, 1);
   assert.equal(calls.filter(call => call.operation === 'getHtml').length, 3);
+});
+
+test('CF verification unavailable through the visible page is reported as source_access_blocked', async t => {
+  const { calls } = await fixture(t, { initialChallenge: true, failShow: true });
+  await assert.rejects(
+    plugin.search({ query: 'fixture', cursor: null, pageSize: 20 }),
+    error => error?.code === 'interaction_required' && /visible browser interaction/u.test(error.message),
+  );
+  assert.equal(calls.filter(call => call.operation === 'show').length, 1);
 });
 
 test('discovery follows the live WAP pagination template instead of removed book routes', async t => {

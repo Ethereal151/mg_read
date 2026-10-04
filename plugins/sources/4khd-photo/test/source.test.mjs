@@ -51,6 +51,29 @@ test('4KHD falls back to the WordPress API when a listing has no parseable cards
   assert.equal(result.document.components[0].children[0].items[0].content.id.startsWith('manga:'), true);
 });
 
+test('4KHD search finds the stable album when a decorated full title is not indexed', async () => {
+  const title = 'Yeha (예하) Pure[269MB-84photos]';
+  const post = { id: 15, link: 'https://feza.uuss.uk/content/03/yeha-pure.html', title: { rendered: title }, jetpack_featured_media_url: 'https://i1.wp.com/pic.4khd.com/cover.jpg' };
+  const queries = [];
+  await plugin.activate({
+    log: { info() {} },
+    resource: { proxy(value) { return value.url; } },
+    http: { async fetch(input) {
+      const url = new URL(String(input));
+      if (url.pathname === '/wp-json/wp/v2/posts' && !url.searchParams.has('search')) return Response.json([{ id: 1 }]);
+      if (url.pathname === '/wp-json/wp/v2/posts') {
+        const query = url.searchParams.get('search');
+        queries.push(query);
+        return Response.json(query === 'Yeha' ? [post] : []);
+      }
+      return new Response('<html></html>');
+    } },
+  });
+  const result = await plugin.search({ query: title, cursor: null, pageSize: 5 });
+  assert.equal(result.items[0].id, 'manga:L2NvbnRlbnQvMDMveWVoYS1wdXJlLmh0bWw');
+  assert.deepEqual(queries, [title, 'Yeha']);
+});
+
 test('4KHD parses split WordPress cards and the detail twitter cover', async () => {
   const cover = 'https://i1.wp.com/pic.4khd.com/cover.jpg';
   const card = `<li class="wp-block-post post-15 post type-post"><figure><a href="https://www.4khd.com/content/15/test.html"><img src="${cover}"></a></figure><h2><a href="https://www.4khd.com/content/15/test.html">测试图集</a></h2></li>`;

@@ -293,7 +293,7 @@ async function getChapters(request) {
       if (/^\d+$/u.test(itemId)) items.push({ id: `novel:${id}:${itemId}`, title: `第${items.length + 1}章`, order: items.length, url: null, volumeTitle: null, wordCount: null, updatedAt: null, isLocked: false, attributes: [] });
     }
   }
-  const groups = [...new Set(items.map((item) => item.volumeTitle).filter((value) => value !== null))].map((title, index) => frozen({ id: `group:${id}:${index}`, title, order: index, episodes: items.filter((item) => item.volumeTitle === title) }));
+  const groups = [...new Set(items.map((item) => item.volumeTitle).filter((value) => value !== null))].map((title, index) => frozen({ id: `group:${id}:${index}`, title, order: index, episodes: items.filter((item) => item.volumeTitle === title).map((item, order) => frozen({ ...item, order })) }));
   return frozen({ items: Object.freeze(items.map(frozen)), groups });
 }
 async function getContent(request) {

@@ -44729,6 +44729,7 @@ var category = "/category/aijc/";
 var headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36", Accept: "text/html,application/xhtml+xml,*/*;q=0.8" };
 var key = Buffer.from("f5d965df75336270");
 var iv = Buffer.from("97b60394abc2fbe1");
+var maximumCoverBytes = 8 * 1024 * 1024;
 var context;
 var cache = /* @__PURE__ */ new Map();
 async function activate(next2) {
@@ -44813,18 +44814,51 @@ function parsePlayers(html3) {
   return values;
 }
 async function summary(value) {
-  return frozen({ id: `video:${value.id}`, title: value.title, contentKind: "video", coverOrientation: "landscape", author: value.author || null, url: `${base}/archives/${value.id}/`, coverUrl: await decryptedCover(value.cover), description: value.description || null, language: "zh-CN", status: "completed", access: "free", wordCount: null, chapterCount: null, publishedAt: null, updatedAt: value.date || null, latestChapter: null, categories: ["AI剧场"], tags: ["短剧"], attributes: [] });
+  return frozen({ id: `video:${value.id}`, title: value.title, contentKind: "video", coverOrientation: "landscape", author: value.author || null, url: `${base}/archives/${value.id}/`, coverUrl: encryptedCoverProxy(value.cover), description: value.description || null, language: "zh-CN", status: "completed", access: "free", wordCount: null, chapterCount: null, publishedAt: null, updatedAt: value.date || null, latestChapter: null, categories: ["AI剧场"], tags: ["短剧"], attributes: [] });
 }
-async function decryptedCover(url) {
-  if (!safeUrl(url)) return null;
+function encryptedCoverProxy(value) {
+  if (!safeUrl(value)) return null;
+  const url = new URL(value);
+  return requireContext().resource.proxy({ kind: "image", url: url.toString(), handler: "ai-duanju-cover-v1", params: { origin: url.origin, path: url.pathname }, headers: { ...headers, Referer: `${base}/` } });
+}
+async function getResource(request) {
+  if (request.handler !== "ai-duanju-cover-v1" || !safeUrl(text3(request.url))) throw new Error("AI cover request is invalid.");
+  const url = new URL(text3(request.url)), params = isObject(request.params) ? request.params : {};
+  if (text3(params.origin) !== url.origin || text3(params.path) !== url.pathname) throw new Error("AI cover origin or path changed.");
+  const response = await requireContext().http.fetch(url.toString(), { headers: { ...headers, Referer: `${base}/` } });
+  if (!response.ok) throw new Error("AI cover request failed.");
+  const encrypted = await readBoundedBody(response, maximumCoverBytes), decipher = createDecipheriv("aes-128-cbc", key, iv), plain = Buffer.concat([decipher.update(encrypted), decipher.final()]), mimeType = decodedImageMime(plain);
+  if (mimeType === null) throw new Error("AI cover image format is unsupported.");
+  return { bytes: new Uint8Array(plain), mimeType };
+}
+async function readBoundedBody(response, limit) {
+  const reader = response.body?.getReader();
+  if (reader === void 0) throw new Error("AI cover response body is unavailable.");
+  const chunks = [];
+  let bytes = 0;
   try {
-    const response = await requireContext().http.fetch(url, { headers: { ...headers, Referer: `${base}/` } });
-    if (!response.ok) return null;
-    const encrypted = Buffer.from(await response.arrayBuffer()), decipher = createDecipheriv("aes-128-cbc", key, iv), plain = Buffer.concat([decipher.update(encrypted), decipher.final()]), mime = plain[0] === 255 && plain[1] === 216 ? "image/jpeg" : plain[0] === 137 && plain[1] === 80 ? "image/png" : plain.subarray(0, 4).toString() === "RIFF" ? "image/webp" : "";
-    return mime ? `data:${mime};base64,${plain.toString("base64")}` : null;
-  } catch {
-    return null;
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      bytes += part.value.byteLength;
+      if (bytes > limit) {
+        await reader.cancel();
+        throw new Error("AI cover response exceeds the size limit.");
+      }
+      chunks.push(Buffer.from(part.value));
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => {
+    });
+    throw error;
   }
+  return Buffer.concat(chunks, bytes);
+}
+function decodedImageMime(bytes) {
+  if (bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return "image/jpeg";
+  if (bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return "image/png";
+  if (bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP") return "image/webp";
+  return null;
 }
 function searchCandidates(query) {
   const values = /* @__PURE__ */ new Set([query]), words = query.split(/\s+/gu).filter(Boolean), characters = Array.from(query);
@@ -44892,6 +44926,7 @@ export {
   getChapters,
   getContent,
   getDetail,
+  getResource,
   search,
   searchSuggestions
 };

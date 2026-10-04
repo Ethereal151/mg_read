@@ -29,6 +29,23 @@ test('Fanqie source keeps book/item IDs and formats paragraphs', async () => {
   assert.match(proxied[0].url, /p6-novel\.byteimg\.com/u);
 });
 
+test('Fanqie chapter order is local and contiguous inside each volume', async () => {
+  await plugin.activate({
+    log: { info() {}, warn() {} },
+    resource: { proxy(value) { return value.url; } },
+    http: { async fetch(input) {
+      assert.ok(String(input).includes('/directory/'));
+      return Response.json({ data: { chapterListWithVolume: [
+        [{ itemId: '1', title: '第1章' }, { itemId: '2', title: '第2章' }],
+        [{ itemId: '3', title: '第3章' }],
+      ] } });
+    } },
+  });
+  const result = await plugin.getChapters({ id: 'novel:12' });
+  assert.deepEqual(result.items.map((item) => item.order), [0, 1, 2]);
+  assert.deepEqual(result.groups.map((group) => group.episodes.map((item) => item.order)), [[0, 1], [0]]);
+});
+
 test('Fanqie login opens WebView, checks status, and imports bookshelf IDs through source details', async () => {
   const calls = [];
   const page = {
