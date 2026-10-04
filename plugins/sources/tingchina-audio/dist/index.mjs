@@ -224,13 +224,17 @@ var playbackCacheTtlMs = 10 * 60 * 1e3;
 var playbackExpirySafetyMs = 5 * 1e3;
 var playbackProbeTimeoutMs = 1500;
 var playbackCacheMaxEntries = 256;
+var playbackRequestIntervalMs = 31e3;
+var playbackRateLimitRetryDelayMs = 31e3;
 var chapterPageConcurrency = 6;
 var chapterCacheTtlMs = 24 * 60 * 60 * 1e3;
-var chapterCachePolicy = Object.freeze({ namespace: "audio-chapters-v1", staleAfterMs: chapterCacheTtlMs, serveStaleWhileRevalidate: true, allowStaleOnError: true });
+var chapterCachePolicy = Object.freeze({ namespace: "audio-chapters-v3", staleAfterMs: chapterCacheTtlMs, serveStaleWhileRevalidate: true, allowStaleOnError: true });
 var context;
 var chapterLocks = /* @__PURE__ */ new Map();
 var playbackCache = /* @__PURE__ */ new Map();
 var playbackLocks = /* @__PURE__ */ new Map();
+var playbackRequestTail = Promise.resolve();
+var lastPlaybackRequestAt = 0;
 var chapterCache;
 async function activate(next) {
   context = next;
@@ -238,6 +242,8 @@ async function activate(next) {
   chapterLocks.clear();
   playbackCache.clear();
   playbackLocks.clear();
+  playbackRequestTail = Promise.resolve();
+  lastPlaybackRequestAt = 0;
   next.log.info("source_activated");
 }
 async function search(request) {
@@ -303,12 +309,33 @@ async function getChapters(request) {
 async function loadChapters(id) {
   const first = await chapterPage(id, 1);
   const total = positive(first.count, first.list.length);
-  const pageCount = Math.min(25, Math.ceil(total / 200));
-  const pages = [first, ...await chapterPages(id, pageCount)];
+  const pages = [first, ...await chapterPagesUntilComplete(id, first, total)];
   const items = pages.flatMap((value) => value.list).slice(0, 5e3).map((value, order) => chapter(id, value, order));
   rememberChapterLocks(items);
   const groups = items.length === 0 ? [] : [frozen({ id: `group:${id}:default`, title: "节目", order: 0, episodes: items })];
   return frozen({ items, groups });
+}
+async function chapterPagesUntilComplete(id, first, total) {
+  const pages = [];
+  let loaded = first.list.length;
+  let estimatedPageCount = Math.min(50, Math.max(1, Math.ceil(total / Math.max(first.list.length, 1))));
+  for (let start = 2; start <= estimatedPageCount && loaded < total; start += chapterPageConcurrency) {
+    const batch = await Promise.all(
+      Array.from({ length: Math.min(chapterPageConcurrency, estimatedPageCount - start + 1) }, (_, offset) => chapterPage(id, start + offset))
+    );
+    for (const value of batch) {
+      if (value.list.length === 0) break;
+      pages.push(value);
+      loaded += value.list.length;
+      if (loaded >= total) break;
+    }
+    if (loaded < total && pages.length > 0) {
+      const averagePageSize = loaded / (pages.length + 1);
+      estimatedPageCount = Math.min(50, Math.max(estimatedPageCount, Math.ceil(total / averagePageSize)));
+    }
+  }
+  if (loaded < total) throw new Error(`Chapter catalog is incomplete (${loaded}/${total}).`);
+  return pages;
 }
 function rememberChapterLocks(items) {
   if (chapterLocks.size + items.length > 1e4) chapterLocks.clear();
@@ -318,16 +345,6 @@ function decodeChapters(value) {
   if (!isObject(value) || !Array.isArray(value.items) || !Array.isArray(value.groups)) return void 0;
   if (!value.items.every(isObject) || !value.groups.every(isObject)) return void 0;
   return value;
-}
-async function chapterPages(id, pageCount) {
-  const pages = [];
-  for (let start = 2; start <= pageCount; start += chapterPageConcurrency) {
-    const batch = await Promise.all(
-      Array.from({ length: Math.min(chapterPageConcurrency, pageCount - start + 1) }, (_, offset) => chapterPage(id, start + offset))
-    );
-    pages.push(...batch);
-  }
-  return pages;
 }
 async function getContent(request) {
   const ctx = requireContext();
@@ -382,7 +399,7 @@ async function resolvePlayback(key, bookId, chapterId) {
   const timestamp2 = Date.now().toString();
   const signature = md5(`${md5(`${timestamp2}${playKey}`)}${playKey}`);
   const endpoint = `${api}AppGetChapterUrl2023?timeStamp=${encodeURIComponent(timestamp2)}&uid=&chapterId=${encodeURIComponent(chapterId)}&addItParapet=${encodeURIComponent(signature)}&bookId=${encodeURIComponent(bookId)}`;
-  const payload = await fetchJson(endpoint);
+  const payload = await fetchPlaybackJson(endpoint);
   const upstream = text(payload.src);
   if (!trustedAudio(upstream)) throw new Error("Playback address is unavailable.");
   const headers = { ...audioHeaders, Origin: base, Referer: `${base}/` };
@@ -394,6 +411,38 @@ async function resolvePlayback(key, bookId, chapterId) {
   }
   playbackCache.set(key, resolved);
   return resolved;
+}
+async function fetchPlaybackJson(url) {
+  const ctx = requireContext();
+  const previous = playbackRequestTail;
+  let release;
+  playbackRequestTail = new Promise((resolve2) => {
+    release = resolve2;
+  });
+  await previous;
+  try {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const waitMs = playbackRequestIntervalMs - (Date.now() - lastPlaybackRequestAt);
+      if (waitMs > 0) await delay(waitMs);
+      lastPlaybackRequestAt = Date.now();
+      const response = await ctx.http.fetch(url, { headers: appHeaders });
+      if (response.status === 429 && attempt === 0) {
+        ctx.log.info("audio_playback_rate_limited");
+        await delay(playbackRateLimitRetryDelayMs);
+        continue;
+      }
+      if (!response.ok) throw new Error(`Playback resolution request failed (${response.status}).`);
+      const value = await response.json();
+      if (!isObject(value)) throw new Error("Playback resolution response is invalid.");
+      return value;
+    }
+    throw new Error("Playback resolution request remained rate limited.");
+  } finally {
+    release();
+  }
+}
+async function delay(milliseconds) {
+  await new Promise((resolve2) => setTimeout(resolve2, milliseconds));
 }
 async function probePlayback(playback) {
   try {

@@ -31,13 +31,19 @@ const playbackCacheTtlMs = 10 * 60 * 1000;
 const playbackExpirySafetyMs = 5 * 1000;
 const playbackProbeTimeoutMs = 1500;
 const playbackCacheMaxEntries = 256;
+// AppGetChapterUrl2023 以来源 IP 限制请求频率；实测一次成功后 30 秒窗口内会返回 429，
+// 且响应没有 Retry-After，因此在来源边界串行并保留一个有界的 31 秒重试窗口。
+const playbackRequestIntervalMs = 31_000;
+const playbackRateLimitRetryDelayMs = 31_000;
 const chapterPageConcurrency = 6;
 const chapterCacheTtlMs = 24 * 60 * 60 * 1000;
-const chapterCachePolicy = Object.freeze({ namespace: 'audio-chapters-v1', staleAfterMs: chapterCacheTtlMs, serveStaleWhileRevalidate: true, allowStaleOnError: true } satisfies PluginCachePolicy);
+const chapterCachePolicy = Object.freeze({ namespace: 'audio-chapters-v3', staleAfterMs: chapterCacheTtlMs, serveStaleWhileRevalidate: true, allowStaleOnError: true } satisfies PluginCachePolicy);
 let context: Context | undefined;
 const chapterLocks = new Map<string, boolean>();
 const playbackCache = new Map<string, CachedPlayback>();
 const playbackLocks = new Map<string, Promise<CachedPlayback>>();
+let playbackRequestTail: Promise<void> = Promise.resolve();
+let lastPlaybackRequestAt = 0;
 let chapterCache: PluginCache | undefined;
 
 type CachedPlayback = { url: string; expiresAt: number; mediaExpiresAt: number | null; headers: Readonly<Record<string, string>> };
@@ -49,6 +55,8 @@ export async function activate(next: Context): Promise<void> {
   chapterLocks.clear();
   playbackCache.clear();
   playbackLocks.clear();
+  playbackRequestTail = Promise.resolve();
+  lastPlaybackRequestAt = 0;
   next.log.info('source_activated');
 }
 
@@ -113,14 +121,36 @@ export async function getChapters(request: { id: string }) {
 
 async function loadChapters(id: string): Promise<ChapterResult> {
   const first = await chapterPage(id, 1); const total = positive(first.count, first.list.length);
-  const pageCount = Math.min(25, Math.ceil(total / 200));
-  const pages = [first, ...(await chapterPages(id, pageCount))];
+  const pages = [first, ...(await chapterPagesUntilComplete(id, first, total))];
   const items = pages.flatMap((value) => value.list).slice(0, 5000).map((value, order) => chapter(id, value, order));
   rememberChapterLocks(items);
   const groups = items.length === 0
     ? []
     : [frozen({ id: `group:${id}:default`, title: '节目', order: 0, episodes: items })];
   return frozen({ items, groups });
+}
+
+async function chapterPagesUntilComplete(id: string, first: Awaited<ReturnType<typeof chapterPage>>, total: number) {
+  const pages = [] as Awaited<ReturnType<typeof chapterPage>>[];
+  let loaded = first.list.length;
+  let estimatedPageCount = Math.min(50, Math.max(1, Math.ceil(total / Math.max(first.list.length, 1))));
+  for (let start = 2; start <= estimatedPageCount && loaded < total; start += chapterPageConcurrency) {
+    const batch = await Promise.all(
+      Array.from({ length: Math.min(chapterPageConcurrency, estimatedPageCount - start + 1) }, (_, offset) => chapterPage(id, start + offset)),
+    );
+    for (const value of batch) {
+      if (value.list.length === 0) break;
+      pages.push(value);
+      loaded += value.list.length;
+      if (loaded >= total) break;
+    }
+    if (loaded < total && pages.length > 0) {
+      const averagePageSize = loaded / (pages.length + 1);
+      estimatedPageCount = Math.min(50, Math.max(estimatedPageCount, Math.ceil(total / averagePageSize)));
+    }
+  }
+  if (loaded < total) throw new Error(`Chapter catalog is incomplete (${loaded}/${total}).`);
+  return pages;
 }
 
 function rememberChapterLocks(items: readonly ReturnType<typeof chapter>[]) {
@@ -189,7 +219,7 @@ async function resolvePlayback(key: string, bookId: string, chapterId: string): 
   }
   const timestamp = Date.now().toString(); const signature = md5(`${md5(`${timestamp}${playKey}`)}${playKey}`);
   const endpoint = `${api}AppGetChapterUrl2023?timeStamp=${encodeURIComponent(timestamp)}&uid=&chapterId=${encodeURIComponent(chapterId)}&addItParapet=${encodeURIComponent(signature)}&bookId=${encodeURIComponent(bookId)}`;
-  const payload = await fetchJson(endpoint); const upstream = text(payload.src);
+  const payload = await fetchPlaybackJson(endpoint); const upstream = text(payload.src);
   if (!trustedAudio(upstream)) throw new Error('Playback address is unavailable.');
   const headers = { ...audioHeaders, Origin: base, Referer: `${base}/` };
   const expiry = playbackExpiry(payload, upstream);
@@ -200,6 +230,38 @@ async function resolvePlayback(key: string, bookId: string, chapterId: string): 
   }
   playbackCache.set(key, resolved);
   return resolved;
+}
+
+async function fetchPlaybackJson(url: string): Promise<Json> {
+  const ctx = requireContext();
+  const previous = playbackRequestTail;
+  let release!: () => void;
+  playbackRequestTail = new Promise<void>((resolve) => { release = resolve; });
+  await previous;
+  try {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const waitMs = playbackRequestIntervalMs - (Date.now() - lastPlaybackRequestAt);
+      if (waitMs > 0) await delay(waitMs);
+      lastPlaybackRequestAt = Date.now();
+      const response = await ctx.http.fetch(url, { headers: appHeaders });
+      if (response.status === 429 && attempt === 0) {
+        ctx.log.info('audio_playback_rate_limited');
+        await delay(playbackRateLimitRetryDelayMs);
+        continue;
+      }
+      if (!response.ok) throw new Error(`Playback resolution request failed (${response.status}).`);
+      const value: unknown = await response.json();
+      if (!isObject(value)) throw new Error('Playback resolution response is invalid.');
+      return value;
+    }
+    throw new Error('Playback resolution request remained rate limited.');
+  } finally {
+    release();
+  }
+}
+
+async function delay(milliseconds: number): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function probePlayback(playback: CachedPlayback): Promise<boolean> {
