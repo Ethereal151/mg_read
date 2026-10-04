@@ -7,6 +7,7 @@ import type { ContentDetail, ContentSummary, MgReadPluginContext } from './contr
 const origin = 'http://www.shukuge.com';
 const maxCatalogPages = 50;
 const maxChapterItems = 5000;
+const chapterGroupSize = 500;
 
 export const categories = Object.freeze([
   ['fantasy', '玄幻', '/i-xuanhuan/'], ['romance', '言情', '/i-yanqing/'],
@@ -125,7 +126,7 @@ export class ShukugeSource {
     });
   }
 
-  async getChapters(id: string) {
+  async getChapters(id: string, request: { readonly groupId?: string; readonly supportsDeferredGroups?: boolean } = {}) {
     const bookUrl = decodeBookId(id);
     const catalogUrl = new URL('index.html', bookUrl);
     const firstHtml = await this.#html(catalogUrl);
@@ -165,8 +166,21 @@ export class ShukugeSource {
       });
     }
     if (chapters.length === 0) throw new Error('Catalog is empty.');
-    if (chapters.length > maxChapterItems) throw new Error('Catalog exceeds the Runtime chapter limit.');
-    return Object.freeze({ items: Object.freeze(chapters) });
+    if (chapters.length <= maxChapterItems) {
+      if (request.groupId !== undefined) throw new Error('Requested chapter group is unavailable.');
+      return Object.freeze({ items: Object.freeze(chapters) });
+    }
+    const groups = chapterGroups(chapters);
+    if (request.groupId !== undefined) {
+      const group = groups.find((candidate) => candidate.id === request.groupId);
+      if (group === undefined) throw new Error('Requested chapter group is unavailable.');
+      return Object.freeze({ items: group.episodes, groups: [Object.freeze({ ...group, order: 0 })] });
+    }
+    if (request.supportsDeferredGroups !== true) throw new Error('This catalog requires deferred chapter groups.');
+    const projected = groups.map((group, index) => index === 0
+      ? group
+      : Object.freeze({ ...group, episodes: Object.freeze([]), deferred: true }));
+    return Object.freeze({ items: groups[0]?.episodes ?? Object.freeze([]), groups: Object.freeze(projected) });
   }
 
   async getContent(id: string, chapterId: string) {
@@ -307,4 +321,14 @@ function cleanDescription(value: string): string | null {
 }
 function parseInteger(value: string | undefined): number | null { const number = Number(value); return Number.isSafeInteger(number) && number >= 0 ? number : null; }
 function uniqueUrls(values: readonly URL[]): readonly URL[] { const seen = new Set<string>(); return values.filter((url) => { const key = url.toString(); if (seen.has(key)) return false; seen.add(key); return true; }); }
+function chapterGroups(chapters: readonly Readonly<Record<string, unknown>>[]) {
+  const groups: Array<Readonly<Record<string, unknown>>> = [];
+  for (let start = 0; start < chapters.length; start += chapterGroupSize) {
+    const episodes = Object.freeze(chapters.slice(start, start + chapterGroupSize).map((chapter, order) => Object.freeze({ ...chapter, order })));
+    const first = episodes[0] === undefined ? undefined : (episodes[0] as { readonly id?: unknown }).id;
+    if (typeof first !== 'string') throw new Error('Catalog chapter ID is invalid.');
+    groups.push(Object.freeze({ id: `group:${first}`, title: `第 ${start + 1}-${start + episodes.length} 章`, order: groups.length, episodes }));
+  }
+  return Object.freeze(groups);
+}
 function isChallenge(body: string): boolean { return /(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser|challenge-platform)/iu.test(body); }

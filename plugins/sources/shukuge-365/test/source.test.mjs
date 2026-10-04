@@ -59,3 +59,26 @@ test('fixtures cover categories search detail paged catalog content and image pr
 test('invalid opaque ids and cross-book chapters are rejected', async () => {
   await assert.rejects(plugin.getDetail({ id: 'book:invalid' }), /Content ID is invalid/u);
 });
+
+test('large catalogs load complete deferred groups without truncation', async () => {
+  const links = Array.from({ length: 5001 }, (_, index) => `<dd><a href="/book/123/${index + 1}.html">第${index + 1}章</a></dd>`).join('');
+  const catalog = `<select><option value="/book/123/index.html">目录</option></select><dl>${links}</dl>`;
+  await plugin.activate({
+    dataDir: 'large-catalog-data', cacheDir: 'large-catalog-cache',
+    app: { runtimeVersion: 'test', nodeVersion: process.versions.node, pluginApi: 1 },
+    plugin: { id: 'org.mgread.shukuge-365', version: '1.0.4' },
+    log: { debug() {}, info() {}, warn() {}, error() {} },
+    resource: { proxy() { return 'http://127.0.0.1/resource'; } },
+    http: { async fetch() { return new Response(catalog); } },
+  });
+  const result = await plugin.getChapters({ id: 'book:L2Jvb2svMTIzLw', supportsDeferredGroups: true });
+  assert.equal(result.items.length, 500);
+  assert.equal(result.groups.length, 11);
+  assert.equal(result.groups[0].deferred, undefined);
+  assert.equal(result.groups[1].deferred, true);
+  assert.equal(result.groups[10].episodes.length, 0);
+  const loaded = await plugin.getChapters({ id: 'book:L2Jvb2svMTIzLw', groupId: result.groups[10].id });
+  assert.equal(loaded.items.length, 1);
+  assert.equal(loaded.items[0].title, '第5001章');
+  assert.equal(loaded.groups[0].deferred, undefined);
+});

@@ -6499,6 +6499,7 @@ var load = getLoad(getParse(parseDocument), esm_default);
 var origin = "http://www.shukuge.com";
 var maxCatalogPages = 50;
 var maxChapterItems = 5e3;
+var chapterGroupSize = 500;
 var categories = Object.freeze([
   ["fantasy", "玄幻", "/i-xuanhuan/"],
   ["romance", "言情", "/i-yanqing/"],
@@ -6617,7 +6618,7 @@ var ShukugeSource = class {
       catalogUrl: catalogUrl.toString()
     });
   }
-  async getChapters(id) {
+  async getChapters(id, request = {}) {
     const bookUrl = decodeBookId(id);
     const catalogUrl = new URL("index.html", bookUrl);
     const firstHtml = await this.#html(catalogUrl);
@@ -6655,8 +6656,19 @@ var ShukugeSource = class {
       });
     }
     if (chapters.length === 0) throw new Error("Catalog is empty.");
-    if (chapters.length > maxChapterItems) throw new Error("Catalog exceeds the Runtime chapter limit.");
-    return Object.freeze({ items: Object.freeze(chapters) });
+    if (chapters.length <= maxChapterItems) {
+      if (request.groupId !== void 0) throw new Error("Requested chapter group is unavailable.");
+      return Object.freeze({ items: Object.freeze(chapters) });
+    }
+    const groups = chapterGroups(chapters);
+    if (request.groupId !== void 0) {
+      const group = groups.find((candidate) => candidate.id === request.groupId);
+      if (group === void 0) throw new Error("Requested chapter group is unavailable.");
+      return Object.freeze({ items: group.episodes, groups: [Object.freeze({ ...group, order: 0 })] });
+    }
+    if (request.supportsDeferredGroups !== true) throw new Error("This catalog requires deferred chapter groups.");
+    const projected = groups.map((group, index2) => index2 === 0 ? group : Object.freeze({ ...group, episodes: Object.freeze([]), deferred: true }));
+    return Object.freeze({ items: groups[0]?.episodes ?? Object.freeze([]), groups: Object.freeze(projected) });
   }
   async getContent(id, chapterId) {
     const bookUrl = decodeBookId(id);
@@ -6811,15 +6823,27 @@ function uniqueUrls(values) {
     return true;
   });
 }
+function chapterGroups(chapters) {
+  const groups = [];
+  for (let start = 0; start < chapters.length; start += chapterGroupSize) {
+    const episodes = Object.freeze(chapters.slice(start, start + chapterGroupSize).map((chapter, order) => Object.freeze({ ...chapter, order })));
+    const first2 = episodes[0] === void 0 ? void 0 : episodes[0].id;
+    if (typeof first2 !== "string") throw new Error("Catalog chapter ID is invalid.");
+    groups.push(Object.freeze({ id: `group:${first2}`, title: `第 ${start + 1}-${start + episodes.length} 章`, order: groups.length, episodes }));
+  }
+  return Object.freeze(groups);
+}
 function isChallenge(body) {
   return /(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser|challenge-platform)/iu.test(body);
 }
 
 // src/index.mts
+var deferredGroups = true;
 var context;
 var source;
 async function activate(next2) {
   context = next2;
+  source = void 0;
   next2.log.info("source_activated");
 }
 async function search(request) {
@@ -6878,7 +6902,7 @@ async function getDetail(request) {
   return invoke("get_detail", (active) => active.getDetail(request.id));
 }
 async function getChapters(request) {
-  return invoke("get_chapters", (active) => active.getChapters(request.id));
+  return invoke("get_chapters", (active) => active.getChapters(request.id, request));
 }
 async function getContent(request) {
   return invoke("get_content", (active) => active.getContent(request.id, request.chapterId));
@@ -6937,6 +6961,7 @@ function cursorPage(cursor, scope) {
 }
 export {
   activate,
+  deferredGroups,
   discover,
   getChapters,
   getContent,
