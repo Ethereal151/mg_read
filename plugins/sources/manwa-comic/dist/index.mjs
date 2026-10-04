@@ -44895,7 +44895,8 @@ function apiSummary(value) {
   return summary(id, text3(first2(value.title, value.name)) || id, text3(first2(value.author, value.authors)), text3(first2(value.cover, value.pic, value.coverUrl)), text3(first2(value.description, value.intro)), stringList(value.tags));
 }
 function summary(id, title, author, cover, description, tags) {
-  return frozen({ id: `manga:${id}`, title, contentKind: "manga", coverOrientation: "portrait", author: author || null, url: bookUrl(id), coverUrl: proxyImage(cover), description: description || null, language: "zh-CN", status: "ongoing", access: "unknown", wordCount: null, chapterCount: null, publishedAt: null, updatedAt: null, latestChapter: null, categories: tags, tags, attributes: [] });
+  const boundedTags = [...new Set(tags)].slice(0, 32);
+  return frozen({ id: `manga:${id}`, title, contentKind: "manga", coverOrientation: "portrait", author: author || null, url: bookUrl(id), coverUrl: proxyImage(cover), description: description || null, language: "zh-CN", status: "ongoing", access: "unknown", wordCount: null, chapterCount: null, publishedAt: null, updatedAt: null, latestChapter: null, categories: boundedTags, tags: boundedTags, attributes: [] });
 }
 function bookId(value) {
   const raw = text3(value), match = /\/comic\/(\d+)/u.exec(raw);

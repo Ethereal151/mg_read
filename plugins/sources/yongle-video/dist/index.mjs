@@ -1,7 +1,7 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
 // src/index.mts
-var base = "https://www.ylsp.lv";
+var base = "https://ylsp.tv";
 var headers = Object.freeze({ Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", "Accept-Language": "zh-CN,zh;q=0.9", Referer: `${base}/`, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0" });
 var categories = Object.freeze([["home", "首页", "/"], ["movie", "电影", "/vodtype/1/"], ["series", "剧集", "/vodtype/2/"], ["variety", "综艺", "/vodtype/3/"], ["anime", "动漫", "/vodtype/4/"], ["new", "更新", "/label/new/"], ["hot", "热榜", "/label/hot/"]]);
 var context;

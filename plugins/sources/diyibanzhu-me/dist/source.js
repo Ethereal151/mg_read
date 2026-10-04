@@ -10,6 +10,7 @@ import * as cheerio from 'cheerio/slim';
 import { PluginCache } from '@mgread/plugin-cache';
 const origin = 'https://m.diyibanzhu.me';
 const browserTimeoutMs = 120000;
+const verificationWaitMs = 90000;
 const listingPolicy = Object.freeze({ namespace: 'listing', staleAfterMs: 10 * 60 * 1000, serveStaleWhileRevalidate: true });
 const detailPolicy = Object.freeze({ namespace: 'detail', staleAfterMs: 60 * 60 * 1000, allowStaleOnError: false });
 const catalogPolicy = Object.freeze({ namespace: 'catalog', staleAfterMs: 60 * 60 * 1000, allowStaleOnError: false });
@@ -119,21 +120,25 @@ export class DiyibanzhuSource {
         this.context.log.warn('source_browser_challenge_detected');
         await page.show({ timeoutMs: browserTimeoutMs });
         this.context.log.info('source_browser_verification_wait_started');
-        await this.#waitForVerification(page);
+        const verified = await this.#waitForVerification(page);
+        if (!verified)
+            this.#raiseAccessBlocked();
         this.context.log.info('source_browser_verification_wait_completed');
         const current = new URL(await page.getUrl({ timeoutMs: browserTimeoutMs }));
         if (current.origin !== origin)
             throw new Error('Browser verification left the source origin.');
         html = await page.getHtml({ timeoutMs: browserTimeoutMs });
-        if (isCf(html))
-            throw new Error('Browser verification is incomplete.');
+        if (html.trim() === '' || isCf(html))
+            this.#raiseAccessBlocked();
         await page.hide({ timeoutMs: browserTimeoutMs });
     } }
-    async #waitForVerification(page) { const deadline = Date.now() + browserTimeoutMs; while (Date.now() < deadline) {
+    #raiseAccessBlocked() { this.context.errors.raise({ code: 'source_access_blocked', message: '访问异常，请完成来源页面的浏览器验证后重试。', annotation: '检测到来源的安全验证页面；请在来源页面完成验证，然后点击“刷新”。' }); }
+    async #waitForVerification(page) { const deadline = Date.now() + verificationWaitMs; while (Date.now() < deadline) {
         await delay(1000);
-        if (!isCf(await page.getHtml({ timeoutMs: browserTimeoutMs })))
-            return;
-    } throw new Error('Browser verification is incomplete.'); }
+        const html = await page.getHtml({ timeoutMs: browserTimeoutMs });
+        if (html.trim() !== '' && !isCf(html))
+            return true;
+    } return false; }
     async #fetchWithDiagnostics(page, url, method, body, attempt) { this.context.log.info(`source_browser_${attempt}_fetch_started`); const response = await this.#fetch(page, url, method, body); this.context.log.info(`source_browser_${attempt}_fetch_completed_${statusClass(response.status)}`); return response; }
     #fetch(page, url, method, body) { return page.fetch({ url: url.toString(), method, headers: method === 'POST' ? { 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' } : { accept: 'text/html' }, body, responseType: 'text', timeoutMs: browserTimeoutMs }); }
     #proxy(url, referer) { if (url.origin !== origin || referer.origin !== origin)

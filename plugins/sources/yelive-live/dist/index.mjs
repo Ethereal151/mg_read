@@ -28,7 +28,7 @@ async function searchSuggestions(_request) {
   return frozen({ items: [], nextCursor: null });
 }
 async function discover(request) {
-  if (request.target === null) return frozen({ kind: "document", document: { components: [{ type: "section", id: "yelive-channels", title: "全网直播", subtitle: "Yelive 公开房间", icon: "live", children: [{ type: "categoryCollection", id: "yelive-channel-list", layout: "chips", categories: channels.map((channel2) => ({ id: channel2.id, title: channel2.title, target: `channel:${channel2.id}`, count: null, url: null, icon: "live" })) }] }] } });
+  if (request.target === null) return frozen({ kind: "document", document: { components: [{ type: "section", id: "yelive-channels", title: "全网直播", subtitle: "Yelive 公开房间", icon: "video", children: [{ type: "categoryCollection", id: "yelive-channel-list", layout: "chips", categories: channels.map((channel2) => ({ id: channel2.id, title: channel2.title, target: `channel:${channel2.id}`, count: null, url: null, icon: "video" })) }] }] } });
   const channel = channels.find((value2) => request.target === `channel:${value2.id}`);
   if (!channel) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target), size = clamp(request.pageSize), offset = (page - 1) * 24, filter = channel.filter ? `&filterGroupTags=${encodeURIComponent(JSON.stringify([[channel.filter]]))}` : "", value = await fetchJson(`api/front/models?limit=24&offset=${offset}&primaryTag=${channel.primary}&sortBy=stripRanking${filter}`), values = models(value).filter(publicModel), contents = values.map(summary).slice(0, size), collectionId = `yelive:${channel.id}`, items = contents.map((content) => frozen({ content, rank: null, metric: null, recommendation: null })), continuation = values.length >= size ? frozen({ target: request.target, cursor: `channel:${channel.id}:${page + 1}` }) : null;
@@ -36,7 +36,7 @@ async function discover(request) {
     if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
-  return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title: channel.title, subtitle: null, icon: "live", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
+  return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title: channel.title, subtitle: null, icon: "video", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
 }
 async function getDetail(request) {
   const id = contentId(request.id), model = await locate(id), item = summary(model);

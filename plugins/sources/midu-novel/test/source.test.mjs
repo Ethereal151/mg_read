@@ -17,6 +17,7 @@ test('native source covers recommendation, search, cold detail, catalog and cont
       return json({ data: [fixtureBook] });
     }
     if (url.pathname === '/fiction/recommend/searchPage') {
+      assert.equal(url.protocol, 'http:');
       return json({ data: { recommendNode: [{ nodeData: { books: [{ bookData: fixtureBook }] } }] } });
     }
     if (url.pathname === '/content/chapterList') {

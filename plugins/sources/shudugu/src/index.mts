@@ -14,7 +14,7 @@ import { ShuduguSource, type SourceRules } from './source.js';
 let context: MgReadPluginContext | undefined;
 let source: ShuduguSource | undefined;
 const sourceRules = Object.freeze({
-  origin: 'https://www.shudugu.org',
+  origin: 'https://www.suduguu.com',
   categories: Object.freeze([
     { id: 'dushi', title: '都市小说' },
     { id: 'xuanhuan', title: '玄幻小说' },

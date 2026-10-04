@@ -6702,6 +6702,7 @@ function byteLength(value) {
 // src/source.ts
 var origin = "https://www.bz777777777.com";
 var browserTimeoutMs = 12e4;
+var verificationWaitMs = 9e4;
 var listing = Object.freeze({ namespace: "listing", staleAfterMs: 10 * 60 * 1e3, serveStaleWhileRevalidate: true });
 var detail = Object.freeze({ namespace: "detail", staleAfterMs: 60 * 60 * 1e3, allowStaleOnError: false });
 var catalog = Object.freeze({ namespace: "catalog", staleAfterMs: 60 * 60 * 1e3, allowStaleOnError: false });
@@ -6891,14 +6892,10 @@ var BzSource = class {
     let html3 = await page.getHtml({ timeoutMs: browserTimeoutMs });
     if (isChallenge(html3)) {
       this.context.log.warn("source_browser_challenge_detected");
-      try {
-        await page.show({ timeoutMs: browserTimeoutMs });
-        this.context.log.info("source_browser_verification_wait_started");
-        await this.#waitForVerification(page);
-      } catch (error) {
-        this.#raiseAccessBlocked();
-        throw error;
-      }
+      await page.show({ timeoutMs: browserTimeoutMs });
+      this.context.log.info("source_browser_verification_wait_started");
+      const verified = await this.#waitForVerification(page);
+      if (!verified) this.#raiseAccessBlocked();
       this.context.log.info("source_browser_verification_wait_completed");
       const current = new URL(await page.getUrl({ timeoutMs: browserTimeoutMs }));
       if (current.origin !== origin) throw new Error("Browser verification left the source origin.");
@@ -6915,12 +6912,12 @@ var BzSource = class {
     });
   }
   async #waitForVerification(page) {
-    const deadline = Date.now() + browserTimeoutMs;
+    const deadline = Date.now() + verificationWaitMs;
     while (Date.now() < deadline) {
       await delay(1e3);
-      if (!isChallenge(await page.getHtml({ timeoutMs: browserTimeoutMs }))) return;
+      if (!isChallenge(await page.getHtml({ timeoutMs: browserTimeoutMs }))) return true;
     }
-    throw new Error("Browser verification is incomplete.");
+    return false;
   }
   async #fetchWithDiagnostics(page, url, method, body, attempt) {
     this.context.log.info(`source_browser_${attempt}_fetch_started`);

@@ -1,17 +1,22 @@
 {
   "name": "@mgread-plugin/wanou-wangpan",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "private": true,
   "description": "MgRead source for Wogg multi-cloud video listings.",
   "type": "module",
   "main": "dist/index.mjs",
-  "bin": { "mgread": "tools/mgread.mjs" },
+  "bin": {
+    "mgread": "tools/mgread.mjs"
+  },
   "packageManager": "npm@11.19.1",
-  "engines": { "node": ">=24", "npm": "11.13.0 || 11.19.1" },
+  "engines": {
+    "node": ">=24",
+    "npm": "11.13.0 || 11.19.1"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json && node tools/mgread.mjs build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test test/*.test.mjs",
+    "test": "npm run build && node --test test/contract.test.mjs test/source.test.mjs",
     "test:live": "npm run build && node --use-env-proxy --test test/live-source.test.mjs",
     "pack:plugin": "npm run build && node tools/mgread.mjs pack",
     "verify": "npm run typecheck && npm test && npm run pack:plugin"
@@ -28,7 +33,10 @@
     "displayName": "玩偶网盘",
     "description": "玩偶影视网盘索引数据源，支持影视搜索、详情、分集与百度/夸克/优汐网盘链接解析。",
     "pluginApi": 1,
-    "packageMode": "single-file","icon":"assets/icon.png",
-    "contentKinds": ["video"]
+    "packageMode": "single-file",
+    "icon": "assets/icon.png",
+    "contentKinds": [
+      "video"
+    ]
   }
 }

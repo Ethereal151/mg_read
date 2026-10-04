@@ -8,13 +8,17 @@ import type {
   SearchRequest,
   SearchSuggestionsRequest,
 } from './contracts.js';
+import type { PluginChaptersRequest } from '@mgread/source-api';
 import { categories, ShukugeSource } from './source.js';
+
+export const deferredGroups = true;
 
 let context: MgReadPluginContext | undefined;
 let source: ShukugeSource | undefined;
 
 export async function activate(next: MgReadPluginContext): Promise<void> {
   context = next;
+  source = undefined;
   next.log.info('source_activated');
 }
 
@@ -79,8 +83,8 @@ export async function getDetail(request: ContentReferenceRequest) {
   return invoke('get_detail', (active) => active.getDetail(request.id));
 }
 
-export async function getChapters(request: ChaptersRequest) {
-  return invoke('get_chapters', (active) => active.getChapters(request.id));
+export async function getChapters(request: ChaptersRequest & Partial<Omit<PluginChaptersRequest, 'id'>>) {
+  return invoke('get_chapters', (active) => active.getChapters(request.id, request as PluginChaptersRequest));
 }
 
 export async function getContent(request: ContentRequest) {

@@ -1,13 +1,13 @@
 /**
  * 永乐视频原生数据源。
  *
- * 职责：直接解析 ylsp.lv 的列表、详情、播放目录与 player_data。
+ * 职责：直接解析 ylsp.tv 的列表、详情、播放目录与 player_data。
  * 生命周期：activate 注入 Runtime 上下文；不共享浏览器或旧规则状态。
  * IO：HTML 通过 ctx.http 获取，封面和视频通过 ctx.resource.proxy。
  * 稳定标识：使用站点 vod 数字 ID 以及播放链接中的 sid/nid。
  */
 import type{MgReadPluginContext}from'@mgread/source-api';type Json=Record<string,unknown>;type Context=MgReadPluginContext;
-const base='https://www.ylsp.lv',headers=Object.freeze({Accept:'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8','Accept-Language':'zh-CN,zh;q=0.9',Referer:`${base}/`,'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0'}),categories=Object.freeze([['home','首页','/'],['movie','电影','/vodtype/1/'],['series','剧集','/vodtype/2/'],['variety','综艺','/vodtype/3/'],['anime','动漫','/vodtype/4/'],['new','更新','/label/new/'],['hot','热榜','/label/hot/']]as const);let context:Context|undefined;
+const base='https://ylsp.tv',headers=Object.freeze({Accept:'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8','Accept-Language':'zh-CN,zh;q=0.9',Referer:`${base}/`,'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0'}),categories=Object.freeze([['home','首页','/'],['movie','电影','/vodtype/1/'],['series','剧集','/vodtype/2/'],['variety','综艺','/vodtype/3/'],['anime','动漫','/vodtype/4/'],['new','更新','/label/new/'],['hot','热榜','/label/hot/']]as const);let context:Context|undefined;
 export async function activate(next:Context):Promise<void>{context=next;next.log.info('source_activated');}
 export async function search(request:{query:string;cursor:string|null;pageSize:number}){const query=request.query.trim();if(query==='')return frozen({items:[],nextCursor:null,totalCount:0});const page=cursorPage(request.cursor,'search'),limit=clamp(request.pageSize),path=page===1?`/vodsearch/${encodeURIComponent(query)}-------------/`:`/vodsearch/${encodeURIComponent(query)}----------${page}---/`,values=parseList(await fetchText(`${base}${path}`)).slice(0,limit);return frozen({items:values,nextCursor:values.length>=limit?`search:${page+1}`:null,totalCount:null});}
 export async function searchSuggestions(_request:{cursor:string|null;pageSize:number}){return frozen({items:[],nextCursor:null});}

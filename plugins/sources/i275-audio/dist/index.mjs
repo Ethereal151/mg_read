@@ -44825,24 +44825,28 @@ async function fetchPage(url, referer) {
   const current = requireContext();
   const sessionRequest = current.browser?.sessionV1?.request;
   if (typeof sessionRequest === "function") {
-    const raw = await sessionRequest.call(current.browser.sessionV1, {
-      version: 1,
-      sessionKey,
-      url,
-      method: "GET",
-      headers: { Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", Referer: referer },
-      body: null,
-      interaction: "silent",
-      presentation: "hidden",
-      transport: "http",
-      timeoutMs: 3e4,
-      maxResponseBytes: 2 * 1024 * 1024
-    });
-    const status = raw.status;
-    if (typeof raw.body !== "string" || typeof status !== "number" || !Number.isInteger(status) || status < 200 || status >= 300) {
-      throw new Error("Source request failed.");
+    try {
+      const raw = await sessionRequest.call(current.browser.sessionV1, {
+        version: 1,
+        sessionKey,
+        url,
+        method: "GET",
+        headers: { Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", Referer: referer },
+        body: null,
+        interaction: "silent",
+        presentation: "hidden",
+        transport: "http",
+        timeoutMs: 3e4,
+        maxResponseBytes: 2 * 1024 * 1024
+      });
+      const status = raw.status;
+      if (typeof raw.body !== "string" || typeof status !== "number" || !Number.isInteger(status) || status < 200 || status >= 300) {
+        throw new Error("Source request failed.");
+      }
+      return raw;
+    } catch (error) {
+      if (!isUnsupportedBrowserSession(error)) throw error;
     }
-    return raw;
   }
   const response = await current.http.fetch(url, {
     headers: {
@@ -44965,6 +44969,10 @@ function mime(url) {
   if (/\.aac(?:$|[?#])/iu.test(url)) return "audio/aac";
   if (/\.flac(?:$|[?#])/iu.test(url)) return "audio/flac";
   return "audio/mpeg";
+}
+function isUnsupportedBrowserSession(error) {
+  if (error !== null && typeof error === "object" && "code" in error && error.code === "unsupported") return true;
+  return /browser session capability|unsupported/iu.test(error instanceof Error ? error.message : String(error));
 }
 function clean(value) {
   return value.replace(/\s+/gu, " ").trim();

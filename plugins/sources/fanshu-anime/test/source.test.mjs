@@ -14,6 +14,12 @@ const video = {
   vod_class: 'TV番剧',
   vod_blurb: 'Fixture intro',
   vod_remarks: '更新至 2 集',
+  vod_time: 1700000000,
+};
+const unavailableVideo = {
+  vod_id: 9000,
+  vod_name: 'Fixture Unavailable',
+  vod_pic: 'https://img.example/unavailable.jpg',
 };
 const detail = {
   ...video,
@@ -52,10 +58,16 @@ test('native source negotiates current guards and projects one encrypted video c
         assert.equal(init.method, 'POST');
         return encrypted({ device_secret: 'fixture-secret', ttl: 86400 });
       }
-      if (action === 'category_videos') {
-        return encrypted(url.searchParams.get('type_id') === '1' ? { list: [video] } : { list: [] });
-      }
-      if (action === 'video_detail') return encrypted(detail);
+                   if (action === 'category_videos') {
+                     return encrypted(url.searchParams.get('type_id') === '1'
+                       ? { list: [unavailableVideo, video] }
+                       : { list: [] });
+                   }
+                   if (action === 'video_detail') {
+                     return encrypted(url.searchParams.get('vod_id') === '9000'
+                       ? { ...unavailableVideo, play_sources: [{ from: 'no', episodes: [] }] }
+                       : detail);
+                   }
       if (action === 'video_play') return encrypted({
         play_url: 'https://media.example/fixture.m3u8',
         headers: { referer: 'https://yoapp.bytegooty.com/', user_agent: 'Fixture Player' },
@@ -67,6 +79,9 @@ test('native source negotiates current guards and projects one encrypted video c
   const root = await plugin.discover({ target: null, cursor: null, collectionId: null, pageSize: 5 });
   const seed = root.document.components[0].children[0].items[0].content;
   assert.equal(seed.title, 'Fixture Anime');
+  assert.equal(seed.updatedAt, '2023-11-14T22:13:20.000Z');
+  assert.equal(seed.url, null);
+  assert.equal(root.document.components[0].icon, 'video');
   assert.equal(root.document.components.at(-1).children[0].categories.length, 9);
   const search = await plugin.search({ query: 'Fixture', cursor: null, pageSize: 5 });
   assert.equal(search.items[0].id, 'video:6861');
@@ -75,6 +90,7 @@ test('native source negotiates current guards and projects one encrypted video c
   const chapters = await plugin.getChapters({ id: info.id });
   assert.equal(chapters.groups[0].title, '高清线路');
   assert.deepEqual(chapters.items.map((item) => item.title), ['第1集', '第2集']);
+  assert.equal(chapters.items[0].url, null);
   const content = await plugin.getContent({ id: info.id, chapterId: chapters.items[0].id });
   assert.equal(content.media.resourceType, 'hls');
   assert.equal(content.media.url, 'http://127.0.0.1/resource/4');

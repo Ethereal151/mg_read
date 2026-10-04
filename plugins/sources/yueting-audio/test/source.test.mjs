@@ -28,3 +28,18 @@ test('discovery keeps the remainder before advancing the encrypted upstream page
  assert.equal(calls.filter(x=>x.endsWith('p2')).length,1);
  await assert.rejects(plugin.discover({target:'channel:novel',cursor:'channel:storytelling:2',collectionId:null,pageSize:3}));
 });
+
+test('large catalogs expose every chapter through bounded deferred groups',async()=>{
+ const chapters=Array.from({length:5329},(_,index)=>({index:index+1,title:`Episode ${index+1}`}));
+ await plugin.activate({log:{info(){}},resource:{proxy:value=>value.url},http:{fetch:async()=>Response.json({payload:encrypted({chapters})})}});
+ const initial=await plugin.getChapters({id:'album:987',supportsDeferredGroups:true});
+ assert.equal(plugin.deferredGroups,true);assert.equal(initial.items.length,500);assert.equal(initial.groups.length,11);
+ assert.equal(initial.groups[0].episodes.at(-1).order,499);
+ const loaded=[];
+ for(const group of initial.groups){
+  if(group.deferred){const result=await plugin.getChapters({id:'album:987',groupId:group.id,supportsDeferredGroups:true});assert.equal(result.groups[0].order,0);assert.equal(result.items[0].order,0);loaded.push(...result.items);}
+  else loaded.push(...group.episodes);
+ }
+ assert.equal(loaded.length,5329);assert.equal(new Set(loaded.map(item=>item.id)).size,5329);
+ assert.equal(loaded[0].id,'album:987:1');assert.equal(loaded.at(-1).id,'album:987:5329');
+});

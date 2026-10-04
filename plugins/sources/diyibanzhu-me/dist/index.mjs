@@ -6702,6 +6702,7 @@ function byteLength(value) {
 // src/source.ts
 var origin = "https://m.diyibanzhu.me";
 var browserTimeoutMs = 12e4;
+var verificationWaitMs = 9e4;
 var listingPolicy = Object.freeze({ namespace: "listing", staleAfterMs: 10 * 60 * 1e3, serveStaleWhileRevalidate: true });
 var detailPolicy = Object.freeze({ namespace: "detail", staleAfterMs: 60 * 60 * 1e3, allowStaleOnError: false });
 var catalogPolicy = Object.freeze({ namespace: "catalog", staleAfterMs: 60 * 60 * 1e3, allowStaleOnError: false });
@@ -6892,22 +6893,27 @@ var DiyibanzhuSource = class {
       this.context.log.warn("source_browser_challenge_detected");
       await page.show({ timeoutMs: browserTimeoutMs });
       this.context.log.info("source_browser_verification_wait_started");
-      await this.#waitForVerification(page);
+      const verified = await this.#waitForVerification(page);
+      if (!verified) this.#raiseAccessBlocked();
       this.context.log.info("source_browser_verification_wait_completed");
       const current = new URL(await page.getUrl({ timeoutMs: browserTimeoutMs }));
       if (current.origin !== origin) throw new Error("Browser verification left the source origin.");
       html3 = await page.getHtml({ timeoutMs: browserTimeoutMs });
-      if (isCf(html3)) throw new Error("Browser verification is incomplete.");
+      if (html3.trim() === "" || isCf(html3)) this.#raiseAccessBlocked();
       await page.hide({ timeoutMs: browserTimeoutMs });
     }
   }
+  #raiseAccessBlocked() {
+    this.context.errors.raise({ code: "source_access_blocked", message: "访问异常，请完成来源页面的浏览器验证后重试。", annotation: "检测到来源的安全验证页面；请在来源页面完成验证，然后点击“刷新”。" });
+  }
   async #waitForVerification(page) {
-    const deadline = Date.now() + browserTimeoutMs;
+    const deadline = Date.now() + verificationWaitMs;
     while (Date.now() < deadline) {
       await delay(1e3);
-      if (!isCf(await page.getHtml({ timeoutMs: browserTimeoutMs }))) return;
+      const html3 = await page.getHtml({ timeoutMs: browserTimeoutMs });
+      if (html3.trim() !== "" && !isCf(html3)) return true;
     }
-    throw new Error("Browser verification is incomplete.");
+    return false;
   }
   async #fetchWithDiagnostics(page, url, method, body, attempt) {
     this.context.log.info(`source_browser_${attempt}_fetch_started`);

@@ -79,6 +79,21 @@ test('drops an expired playback URL without probing it', async () => {
   assert.equal(playCalls, 2); assert.equal(probeCalls, 0);
 });
 
+test('serializes rapid chapter resolution and retries one upstream 429', async () => {
+  let playCalls = 0; let active = 0; let maximumActive = 0; let first = true;
+  await plugin.activate({ cacheDir: 'fixture-cache', log: { info() {}, warn() {} }, resource: { proxy(value) { return value.url; } }, http: { async fetch(input, init = {}) {
+    const url = String(input);
+    if (!url.includes('AppGetChapterUrl2023')) return Response.json({ data: { count: 1, list: [{ chapterId: 'c-1', title: 'Episode one', price: 0 }] } });
+    playCalls += 1; active += 1; maximumActive = Math.max(maximumActive, active);
+    await new Promise((resolve) => setTimeout(resolve, 5)); active -= 1;
+    if (first) { first = false; return new Response('rate limited', { status: 429 }); }
+    return Response.json({ status: 0, src: `https://audio.tingshijie.com/chapter-${playCalls}.m4a?expires=4102444800` });
+  } } });
+  const requests = [1, 2].map((chapterId) => plugin.getContent({ id: 'audio:book-rate-limit', chapterId: `audio:book-rate-limit:c-${chapterId}` }));
+  const results = await Promise.all(requests);
+  assert.equal(results.length, 2); assert.equal(playCalls, 3); assert.equal(maximumActive, 1);
+});
+
 test('loads a long catalog in bounded parallel page batches while preserving order', async () => {
   let active = 0; let maximumActive = 0;
   await plugin.activate({ cacheDir: 'fixture-cache', log: { info() {}, warn() {} }, resource: { proxy() { return 'http://127.0.0.1:9000/v1/source-resource/token123456789012'; } }, http: { async fetch(input) {
@@ -86,10 +101,12 @@ test('loads a long catalog in bounded parallel page batches while preserving ord
     active += 1; maximumActive = Math.max(maximumActive, active);
     await new Promise((resolve) => setTimeout(resolve, 10));
     active -= 1;
-    return Response.json({ data: { count: 1000, list: [{ chapterId: `c-${page}`, title: `Episode ${page}`, price: 0 }] } });
+    const pageSize = page === 4 ? 30 : 200;
+    return Response.json({ data: { count: 630, list: Array.from({ length: pageSize }, (_, index) => ({ chapterId: `c-${page}-${index}`, title: `Episode ${page}-${index}`, price: 0 })) } });
   } } });
   const result = await plugin.getChapters({ id: 'audio:book-long' });
-  assert.equal(result.items.map((item) => item.id).join(','), [1, 2, 3, 4, 5].map((page) => `audio:book-long:c-${page}`).join(','));
+  assert.equal(result.items.length, 630);
+  assert.equal(result.items.filter((item) => item.id.endsWith('-0')).map((item) => item.id).join(','), [1, 2, 3, 4].map((page) => `audio:book-long:c-${page}-0`).join(','));
   assert.ok(maximumActive > 1);
   assert.ok(maximumActive <= 6);
 });

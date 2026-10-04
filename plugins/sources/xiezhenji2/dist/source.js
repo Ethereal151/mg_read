@@ -26,7 +26,7 @@ export class Xiezhenji2Source {
     }
     async search(query, page) {
         const url = new URL(page === 1 ? '/' : `/page/${page}/`, origin);
-        url.searchParams.set('s', query);
+        url.searchParams.set('s', normalizeSearchQuery(query));
         return this.parseList(await this.#cachedHtml(url, listingPolicy), url);
     }
     async discover(categoryId, page) {
@@ -113,6 +113,13 @@ export class Xiezhenji2Source {
 }
 function summary(id, title, url, coverUrl, description, author, tags) { return Object.freeze({ id, title, contentKind: 'manga', author, url: url.toString(), coverUrl, description, language: null, status: 'unknown', access: 'free', wordCount: null, chapterCount: 1, publishedAt: null, updatedAt: null, latestChapter: { id: `gallery:${token(url)}`, title: '全部图片', url: url.toString(), updatedAt: null }, categories: tags, tags, attributes: Object.freeze([]) }); }
 function encodeId(url) { return `post:${token(url)}`; }
+function normalizeSearchQuery(query) {
+    const withoutMediaCount = query.replace(/\s*[“"][^”"]*(?:photos?|videos?)[^”"]*[”"]\s*$/iu, '').trim();
+    if (withoutMediaCount === '' || withoutMediaCount === query)
+        return query;
+    const separator = withoutMediaCount.search(/\s+[–—]\s+/u);
+    return separator < 0 ? withoutMediaCount : withoutMediaCount.slice(0, separator).trim();
+}
 function decodeId(id) { const match = /^post:([A-Za-z0-9_-]+)$/u.exec(id); if (match?.[1] === undefined)
     throw new Error('Content ID is invalid.'); const path = Buffer.from(match[1], 'base64url').toString('utf8'); const url = new URL(path, origin); if (!isPostUrl(url))
     throw new Error('Content ID is invalid.'); return url; }

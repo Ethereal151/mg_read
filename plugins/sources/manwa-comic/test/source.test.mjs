@@ -27,3 +27,12 @@ test('adjacent API page overlap and duplicate tags do not duplicate discovery en
  assert.equal(tail.items.length,5);assert.equal(tail.continuation,null);assert.deepEqual(list.items[0].content.tags,['题材']);
  assert.equal(new Set([...list.items,...tail.items].map(x=>x.content.id)).size,11);
 });
+
+test('detail bounds source tags to the public response limit',async()=>{
+ const tags=Array.from({length:42},(_,index)=>`<a class="tag">tag-${index}</a>`).join('');
+ await plugin.activate({log:{info(){}},resource:{proxy:request=>request.url},http:{fetch:async()=>new Response(`<h1 class="comic-title" data-original-title="Many tags"></h1><img class="comic-cover" src="https://img.example/cover.jpg"><div id="tagsContainer">${tags}</div>`)}});
+ const detail=await plugin.getDetail({id:'manga:123'});
+ assert.equal(detail.categories.length,32);
+ assert.equal(detail.tags.length,32);
+ assert.equal(detail.categories.at(-1),'tag-31');
+});

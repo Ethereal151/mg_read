@@ -6723,7 +6723,7 @@ var Xiezhenji2Source = class {
   #cache;
   async search(query, page) {
     const url = new URL(page === 1 ? "/" : `/page/${page}/`, origin);
-    url.searchParams.set("s", query);
+    url.searchParams.set("s", normalizeSearchQuery(query));
     return this.parseList(await this.#cachedHtml(url, listingPolicy), url);
   }
   async discover(categoryId, page) {
@@ -6811,6 +6811,12 @@ function summary(id, title, url, coverUrl, description, author, tags) {
 }
 function encodeId(url) {
   return `post:${token(url)}`;
+}
+function normalizeSearchQuery(query) {
+  const withoutMediaCount = query.replace(/\s*[“"][^”"]*(?:photos?|videos?)[^”"]*[”"]\s*$/iu, "").trim();
+  if (withoutMediaCount === "" || withoutMediaCount === query) return query;
+  const separator = withoutMediaCount.search(/\s+[–—]\s+/u);
+  return separator < 0 ? withoutMediaCount : withoutMediaCount.slice(0, separator).trim();
 }
 function decodeId(id) {
   const match = /^post:([A-Za-z0-9_-]+)$/u.exec(id);

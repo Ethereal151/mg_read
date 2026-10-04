@@ -291,6 +291,7 @@ var key = Buffer.from("ea9d9d4f9a983fe6f6382f29c7b46b8d6dc47abc6da36662e6ddff8c7
 var appAgent = "zybk/1.0.6";
 var webAgent = "Mozilla/5.0 (Linux; Android 13; Pixel 7 Build/TQ3A.230805.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36";
 var context;
+var deferredGroups = true;
 async function activate(next) {
   context = next;
   next.log.info("source_activated");
@@ -352,7 +353,19 @@ async function getDetail(request) {
 }
 async function getChapters(request) {
   const id = contentId(request.id), data = decryptObject(await getPayload(`album_chapters/${encodeURIComponent(id)}`)), items = records(data.chapters).map((value, index) => chapter(id, value, index)).filter(notNull);
-  return frozen({ items, groups: items.length === 0 ? [] : [frozen({ id: `group:${id}:main`, title: "节目", order: 0, episodes: items })] });
+  if (items.length <= 5e3) {
+    if (request.groupId !== void 0) throw new Error("Requested chapter group is unavailable.");
+    return frozen({ items, groups: items.length === 0 ? [] : [frozen({ id: `group:${id}:main`, title: "节目", order: 0, episodes: items })] });
+  }
+  const groups = chapterGroups(id, items);
+  if (request.groupId !== void 0) {
+    const group = groups.find((value) => value.id === request.groupId);
+    if (group === void 0) throw new Error("Requested chapter group is unavailable.");
+    return frozen({ items: group.episodes, groups: [frozen({ ...group, order: 0 })] });
+  }
+  if (request.supportsDeferredGroups !== true) throw new Error("This catalog requires deferred chapter groups.");
+  const projected = groups.map((group, index) => index === 0 ? group : frozen({ ...group, episodes: [], deferred: true }));
+  return frozen({ items: groups[0]?.episodes ?? [], groups: projected });
 }
 async function getContent(request) {
   const albumId = contentId(request.id), chapterIndex = chapterNative(request.chapterId, albumId), dfp = makeDfp(), cookieHeaders = { "User-Agent": webAgent, Cookie: `dfp=${dfp}` };
@@ -456,6 +469,14 @@ function chapter(albumId, value, index) {
   if (native === null) return null;
   return frozen({ id: `album:${albumId}:${native}`, title: text(value.title) || `第 ${index + 1} 集`, order: index, url: null, volumeTitle: "节目", wordCount: null, updatedAt: null, isLocked: false, attributes: [] });
 }
+function chapterGroups(albumId, items, size = 500) {
+  const groups = [];
+  for (let start = 0; start < items.length; start += size) {
+    const episodes = items.slice(start, start + size).map((item, index) => frozen({ ...item, order: index })), firstId = episodes[0]?.id ?? String(start);
+    groups.push(frozen({ id: `group:${albumId}:${firstId}`, title: `第 ${start + 1}-${start + episodes.length} 集`, order: groups.length, episodes }));
+  }
+  return groups;
+}
 function sourceId(value) {
   const id = text(value);
   return /^\d+$/u.test(id) ? id : null;
@@ -539,6 +560,7 @@ function requireContext() {
 }
 export {
   activate,
+  deferredGroups,
   discover,
   getChapters,
   getContent,

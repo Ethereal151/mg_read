@@ -3,6 +3,7 @@ import { createRequire as __mgreadCreateRequire } from 'node:module'; const requ
 // src/index.mts
 import { createHash } from "node:crypto";
 var apiBase = "https://api.midukanshu.com";
+var recommendationApi = "http://api.midukanshu.com/fiction/recommend/searchPage";
 var saasBase = "https://saasapi.midukanshu.com";
 var h5Base = "https://m.midukanshu.com";
 var staticBase = "https://book.midukanshu.com";
@@ -185,7 +186,7 @@ async function searchBooks(query, page) {
   });
 }
 async function recommendations() {
-  const payload = await postForm(`${apiBase}/fiction/recommend/searchPage`, new URLSearchParams(), `${h5Base}/novel/index.html`);
+  const payload = await postForm(recommendationApi, new URLSearchParams(), `${h5Base}/novel/index.html`);
   const data = isRecord(payload.data) ? payload.data : {};
   const nodes = Array.isArray(data.recommendNode) ? data.recommendNode : [];
   const result = [];

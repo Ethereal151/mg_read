@@ -113,8 +113,8 @@ function summaryFrom(item) {
 }
 function chapter(id, episode, index) {
   const key = episodeKey(episode, index);
-  const order = integer(episode.playOrder ?? episode.episode) ?? index + 1;
-  return frozen({ id: `drama:${encodeKey(id)}:${encodeKey(key)}`, title: `第${order}集`, order: Math.max(0, order - 1), url: null, volumeTitle: "默认线路", wordCount: null, updatedAt: null, isLocked: null, attributes: [] });
+  const number = integer(episode.playOrder ?? episode.episode) ?? index + 1;
+  return frozen({ id: `drama:${encodeKey(id)}:${encodeKey(key)}`, title: `第${number}集`, order: index, url: null, volumeTitle: "默认线路", wordCount: null, updatedAt: null, isLocked: null, attributes: [] });
 }
 function episodeKey(episode, index) {
   const key = text(episode.episodeOneId) || text(episode.id) || text(episode.videoId) || text(episode.playOrder) || text(episode.episode);

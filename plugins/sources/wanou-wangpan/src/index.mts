@@ -44,11 +44,11 @@ export async function discover(request: { target: string | null; cursor: string 
         type: 'categoryCollection', id: 'wanou-category-list', layout: 'chips',
         categories: categories.map(([id, title]) => ({ id, title, target: `category:${id}`, count: null, url: null, icon: 'video' })),
       }] },
-      { type: 'section', id: 'wanou-login', title: '网盘登录', subtitle: '首次播放前请在此打开并完成对应网盘的官方登录', icon: 'account', children: [{
+      { type: 'section', id: 'wanou-login', title: '网盘登录', subtitle: '首次播放前请在此打开并完成对应网盘的官方登录', icon: 'books', children: [{
         type: 'categoryCollection', id: 'wanou-login-list', layout: 'chips', categories: [
-          { id: 'quark', title: '登录夸克网盘', target: 'login:quark', count: null, url: null, icon: 'account' },
-          { id: 'uc', title: '登录优汐网盘', target: 'login:uc', count: null, url: null, icon: 'account' },
-          { id: 'baidu', title: '登录百度网盘', target: 'login:baidu', count: null, url: null, icon: 'account' },
+          { id: 'quark', title: '登录夸克网盘', target: 'login:quark', count: null, url: null, icon: 'books' },
+          { id: 'uc', title: '登录优汐网盘', target: 'login:uc', count: null, url: null, icon: 'books' },
+          { id: 'baidu', title: '登录百度网盘', target: 'login:baidu', count: null, url: null, icon: 'books' },
         ],
       }] },
     ] } });
@@ -125,7 +125,7 @@ async function openLogin(target: string) {
   const provider = target.slice('login:'.length) as Provider;
   if (provider !== 'quark' && provider !== 'uc' && provider !== 'baidu') throw new Error('Login provider is invalid.');
   await openProviderLogin(provider);
-  return frozen({ kind: 'document' as const, document: { components: [{ type: 'section', id: `wanou-${provider}-login-opened`, title: `${providerLabel(provider)}登录已打开`, subtitle: '请在打开的官方页面完成登录；完成后回到详情页重新加载线路。', icon: 'account', children: [] }] } });
+  return frozen({ kind: 'document' as const, document: { components: [{ type: 'section', id: `wanou-${provider}-login-opened`, title: `${providerLabel(provider)}登录已打开`, subtitle: '请在打开的官方页面完成登录；完成后回到详情页重新加载线路。', icon: 'books', children: [] }] } });
 }
 
 async function openProviderLogin(provider: Provider): Promise<void> {

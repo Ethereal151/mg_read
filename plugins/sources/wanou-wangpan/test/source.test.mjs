@@ -36,3 +36,17 @@ test('projects Wogg listing, share files and a user-login action through public 
   await plugin.discover({ target: 'login:quark', cursor: null, collectionId: null, pageSize: 10 });
   assert.ok(requests.includes('show:https://pan.quark.cn/'));
 });
+
+test('login discovery uses icons from the public vocabulary', async () => {
+  await plugin.activate({ log: { info() {} } });
+  const result = await plugin.discover({ target: null, cursor: null, collectionId: null, pageSize: 10 });
+  const icons = [];
+  const visit = (component) => {
+    if (component.icon !== undefined) icons.push(component.icon);
+    for (const child of component.children ?? []) visit(child);
+    for (const category of component.categories ?? []) if (category.icon !== undefined) icons.push(category.icon);
+  };
+  for (const component of result.document.components) visit(component);
+  assert.ok(icons.length > 0);
+  assert.equal(icons.includes('account'), false);
+});
